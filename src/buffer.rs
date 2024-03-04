@@ -138,49 +138,6 @@ impl Buffer {
         Some(offset + position.x)
     }
 
-    /// Check if the buffer contains the column for the line. Use 0-based alignment.
-    pub fn get_line_length(&self, y: usize) -> usize {
-        if self.line_starts_data.is_empty() && self.line_starts_add.is_empty() {
-            // TODO: never happens since it's never empty
-            return self.get().len();
-        }
-
-        let y_line_start_res = self.get_offset_from_position(&Position { x: 0, y });
-        let next_y_line_start_res = self.get_offset_from_position(&Position { x: 0, y: y + 1 });
-
-        if let Some(y_line_start) = y_line_start_res {
-            if let Some(next_y_line_start) = next_y_line_start_res {
-                return next_y_line_start
-                    .saturating_sub(y_line_start)
-                    .saturating_sub(2);
-            }
-            // TODO: avoid getting full sequence
-            // idea: count via piece in reverse
-            let content_len = self
-                .get()
-                .chars()
-                .skip(y_line_start)
-                .filter(|x| *x != '\n' && *x != '\r')
-                .count();
-
-            return content_len;
-        }
-
-        0
-    }
-
-    /// Check if the buffer contains the column for the line. Use 0-based alignment.
-    pub fn is_valid_column(&self, position: &Position) -> bool {
-        let line_length = self.get_line_length(position.y);
-        if position.y + 1 == self.get_total_lines() && position.x == 0 && line_length == 0 {
-            return true;
-        }
-        if line_length == 0 || position.x > line_length {
-            return false;
-        }
-        true
-    }
-
     pub fn get_total_lines(&self) -> usize {
         let mut total = 0;
         for piece in self.pieces.iter() {
@@ -197,11 +154,6 @@ impl Buffer {
             total += line_starts_len;
         }
         total
-    }
-
-    /// Check if the buffer contains the line. Use 0-based alignment.
-    pub fn is_valid_line(&self, line: usize) -> bool {
-        line < self.get_total_lines()
     }
 
     pub fn insert_new_line(&mut self, offset: usize) {
