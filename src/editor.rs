@@ -1,33 +1,36 @@
+#[cfg(test)]
+mod tests;
+
 use std::io::{stdin, Error};
-
 use termion::event::Key;
-
-use crate::{buffer::Buffer, terminal::Terminal, Position};
+use crate::{buffer::Buffer, position::Position, terminal::Terminal};
 
 pub struct Editor {
     terminal: Terminal,
     cursor_position: Position,
     current_line_length: usize,
-    offset_y: usize,
     buffer: Buffer,
     status: String,
 }
 
 impl Editor {
-    pub fn new(file_name: Option<&str>) -> Result<Editor, Error> {
-        let buffer = match file_name {
-            Some(path) => Buffer::from_file(path)?,
-            None => Buffer::default(),
-        };
-        Ok(Editor {
+    pub fn new(buffer: Buffer) -> Result<Editor, Error> {
+        let editor = Editor {
             terminal: Terminal::new()?,
             cursor_position: Position::default(),
-            current_line_length: 0,
-            offset_y: 0,
+            current_line_length: buffer.get_line_length(0),
             buffer,
             status: String::new(),
-        })
+        };
+        Ok(editor)
     }
+
+    pub fn set_buffer(&mut self, buffer: Buffer) {
+        self.current_line_length = buffer.get_line_length(self.cursor_position.y);
+        self.cursor_position = Position::default();
+        self.buffer = buffer;
+    }
+
     pub fn main_loop(&mut self) {
         let stdin = stdin();
         loop {
@@ -55,7 +58,7 @@ impl Editor {
             self.terminal.write(&self.buffer.debug);
 
             // Status bar
-            self.status = format!("{}/{}", self.cursor_position.x, self.cursor_position.y);
+            self.status = format!("col {} | row {} | line {}", self.cursor_position.x, self.cursor_position.y, self.current_line_length);
             self.terminal.goto(&Position {
                 x: 0,
                 y: self.terminal.size().1 as usize - 1,
@@ -90,6 +93,7 @@ impl Editor {
                         self.buffer.insert(c.to_string().as_str(), offset);
                         self.cursor_position.x += 1;
                     }
+                    self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
                 }
                 Key::Ctrl(c) => {
                     if c == 'q' {
@@ -107,14 +111,16 @@ impl Editor {
                         self.cursor_position.x -= 1;
                         self.buffer.delete(offset - 1, 1);
                     } else if self.cursor_position.y > 0 {
-                        let line_length = self.get_line_length(self.cursor_position.y - 1);
-                        self.cursor_position.x = line_length;
+                        let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
+                        self.cursor_position.x = line_len;
                         self.cursor_position.y -= 1;
                         self.buffer.delete(offset - 2, 2);
                     } else {
                         // empty
                         continue;
                     }
+                    
+                    self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
                 }
                 Key::Left => {
                     if self.cursor_position.x > 0 {
@@ -134,13 +140,13 @@ impl Editor {
                     if self.cursor_position.y > 0 {
                         self.cursor_position.y -= 1;
                     }
-                    self.current_line_length = self.get_line_length(self.cursor_position.y);
+                    self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
                 }
                 Key::Down => {
                     if self.is_valid_line(self.cursor_position.y + 1) {
                         self.cursor_position.y += 1;
                     }
-                    self.current_line_length = self.get_line_length(self.cursor_position.y);
+                    self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
                 }
                 _ => {
                     dbg!(&key);
@@ -166,33 +172,5 @@ impl Editor {
             return false;
         }
         true
-    }
-
-    /// Check if the buffer contains the column for the line. Use 0-based alignment.
-    pub fn get_line_length(&self, y: usize) -> usize {
-        let y_line_start_res = self.buffer.get_offset_from_position(&Position { x: 0, y });
-        let next_y_line_start_res = self
-            .buffer
-            .get_offset_from_position(&Position { x: 0, y: y + 1 });
-
-        if let Some(y_line_start) = y_line_start_res {
-            if let Some(next_y_line_start) = next_y_line_start_res {
-                return next_y_line_start
-                    .saturating_sub(y_line_start)
-                    .saturating_sub(2);
-            }
-            // TODO: avoid getting full sequence
-            // idea: count via piece in reverse
-            let content_len = self
-                .buffer
-                .get()
-                .chars()
-                .skip(y_line_start)
-                .filter(|x| *x != '\n' && *x != '\r')
-                .count();
-
-            return content_len;
-        }
-        0
     }
 }

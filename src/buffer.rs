@@ -1,28 +1,9 @@
+#[cfg(test)]
+mod tests;
+
+use crate::piece::{Piece, Source};
+use crate::position::Position;
 use std::{fs::File, io::Read};
-
-use crate::Position;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Source {
-    Data,
-    Add,
-}
-
-#[derive(Debug)]
-pub struct Piece {
-    source: Source,
-    offset: usize,
-    length: usize,
-}
-impl Piece {
-    pub fn new(action: Source, offset: usize, length: usize) -> Piece {
-        Piece {
-            source: action,
-            offset,
-            length,
-        }
-    }
-}
 
 #[derive(Default)]
 pub struct Buffer {
@@ -35,6 +16,16 @@ pub struct Buffer {
     pub line_starts_add: Vec<usize>,
 }
 impl Buffer {
+    /// Returns a Result of a Buffer loaded from a file.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// if let Some(buffer) = Buffer::from_file("./test.txt") {
+    ///     // to something
+    /// }
+    /// ```
+    ///
     pub fn from_file(file_path: &str) -> std::io::Result<Buffer> {
         let mut file = File::open(file_path)?;
         let mut contents = String::new();
@@ -60,11 +51,7 @@ impl Buffer {
         Buffer {
             data,
             add: String::new(),
-            pieces: vec![Piece {
-                source: Source::Data,
-                offset: 0,
-                length,
-            }],
+            pieces: vec![Piece::new(Source::Data, 0, length)],
             debug: String::new(),
             line_starts_data: new_lines,
             line_starts_add: vec![],
@@ -272,5 +259,30 @@ impl Buffer {
             }
         }
         data
+    }
+
+    /// Check if the buffer contains the column for the line. Use 0-based alignment.
+    pub fn get_line_length(&self, y: usize) -> usize {
+        let y_line_start_res = self.get_offset_from_position(&Position { x: 0, y });
+        let next_y_line_start_res = self.get_offset_from_position(&Position { x: 0, y: y + 1 });
+
+        if let Some(y_line_start) = y_line_start_res {
+            if let Some(next_y_line_start) = next_y_line_start_res {
+                return next_y_line_start
+                    .saturating_sub(y_line_start)
+                    .saturating_sub(2);
+            }
+            // TODO: avoid getting full sequence
+            // idea: count via piece in reverse
+            let content_len = self
+                .get()
+                .chars()
+                .skip(y_line_start)
+                .filter(|x| *x != '\n' && *x != '\r')
+                .count();
+
+            return content_len;
+        }
+        0
     }
 }

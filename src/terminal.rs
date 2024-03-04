@@ -5,7 +5,7 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
 };
 
-use crate::Position;
+use crate::position::Position;
 
 pub struct Terminal {
     size: (u16, u16),

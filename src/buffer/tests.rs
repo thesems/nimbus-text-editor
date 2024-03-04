@@ -1,4 +1,4 @@
-use nimbus_text_editor::{buffer::Buffer, Position};
+use crate::{buffer::Buffer, position::Position};
 
 #[test]
 fn test_buffer_init() {
@@ -186,54 +186,6 @@ fn test_delete_insert_alternate() {
 }
 
 #[test]
-fn test_get_line_length() {
-    let file = String::from("File is read.\r\nThe hero lied.\r\nThe end.");
-    let buffer = Buffer::from_string(file);
-
-    assert_eq!(buffer.get_line_length(0), 13);
-    assert_eq!(buffer.get_line_length(1), 14);
-    assert_eq!(buffer.get_line_length(2), 8);
-    assert_eq!(buffer.get_line_length(3), 0);
-    assert_eq!(buffer.get_line_length(4), 0);
-}
-
-#[test]
-fn test_is_valid_column() {
-    let file = String::from("File is read.\r\nThe hero lied.\r\nThe end.");
-    let buffer = Buffer::from_string(file);
-
-    assert!(buffer.is_valid_column(&Position { x: 0, y: 0 }));
-    assert!(buffer.is_valid_column(&Position { x: 13, y: 0 }));
-    assert!(buffer.is_valid_column(&Position { x: 0, y: 1 }));
-    assert!(buffer.is_valid_column(&Position { x: 14, y: 1 }));
-    assert!(buffer.is_valid_column(&Position { x: 0, y: 2 }));
-    assert!(buffer.is_valid_column(&Position { x: 8, y: 2 }));
-
-    // assert!(!buffer.is_valid_column(&Position { x: 0, y: 3 }));
-    // let file = String::from("File is read.\r\nThe hero lied.\r\nThe end.\r\n");
-    // let buffer = Buffer::from_string(file);
-    // assert!(buffer.is_valid_column(&Position { x: 0, y: 3 }));
-}
-
-#[test]
-fn test_is_valid_line() {
-    let file = String::from("File is read.\r\nThe hero lied.\r\nThe end.");
-    let buffer = Buffer::from_string(file);
-
-    assert!(buffer.is_valid_line(0));
-    assert!(buffer.is_valid_line(1));
-    assert!(buffer.is_valid_line(2));
-    assert!(!buffer.is_valid_line(3));
-    assert!(!buffer.is_valid_line(4));
-
-    let file = String::from("File is read.\r\nThe hero lied.\r\nThe end.\r\n");
-    let buffer = Buffer::from_string(file);
-
-    assert!(buffer.is_valid_line(3));
-    assert!(!buffer.is_valid_line(4));
-}
-
-#[test]
 fn test_get_total_line() {
     let file = String::from("File is read.\r\nThe hero lied.\r\nThe end.");
     let buffer = Buffer::from_string(file);
@@ -241,19 +193,12 @@ fn test_get_total_line() {
 }
 
 #[test]
-fn test_editor_complex_1() {
-    let file = String::from("File is read.\r\nThe hero lied.\r\nThe end.\r\n");
-    let mut buffer = Buffer::from_string(file);
+fn test_get_line_length() {
+    let buffer = Buffer::from_string("File is read.\r\nThe hero lied.\r\nThe end.".to_string());
 
-    buffer.delete(29, 2);
-    assert_eq!(buffer.get(), "File is read.\r\nThe hero lied.The end.\r\n");
-
-    assert_eq!(buffer.get_line_length(1), 22);
-    assert_eq!(buffer.get_total_lines(), 3);
-
-    assert!(buffer.is_valid_column(&Position { x: 22, y: 1 }));
-    assert!(!buffer.is_valid_column(&Position { x: 23, y: 1 }));
-    assert!(buffer.is_valid_line(1));
-    assert!(buffer.is_valid_line(2));
-    assert!(!buffer.is_valid_line(3));
+    assert_eq!(buffer.get_line_length(0), 13);
+    assert_eq!(buffer.get_line_length(1), 14);
+    assert_eq!(buffer.get_line_length(2), 8);
+    assert_eq!(buffer.get_line_length(3), 0);
+    assert_eq!(buffer.get_line_length(4), 0);
 }

@@ -1,4 +1,4 @@
-use nimbus_text_editor::editor::Editor;
+use nimbus_text_editor::{buffer::Buffer, editor::Editor};
 use std::{env, io::Error, process};
 
 fn main() -> Result<(), Error> {
@@ -14,7 +14,12 @@ fn main() -> Result<(), Error> {
         }
     };
 
-    let mut editor = Editor::new(file_name)?;
+    let buffer = match file_name {
+        Some(path) => Buffer::from_file(path)?,
+        None => Buffer::default(),
+    };
+
+    let mut editor = Editor::new(buffer)?;
     editor.main_loop();
     Ok(())
 }
