@@ -1,9 +1,19 @@
 #[cfg(test)]
 mod tests;
 
-use std::io::{stdin, Error};
-use termion::event::Key;
 use crate::{buffer::Buffer, position::Position, terminal::Terminal};
+use std::{
+    io::{stdin, Error},
+    process,
+};
+use termion::event::Key;
+
+#[derive(PartialEq)]
+enum EditorMode {
+    Normal,
+    Insert,
+    Command,
+}
 
 pub struct Editor {
     terminal: Terminal,
@@ -11,6 +21,8 @@ pub struct Editor {
     current_line_length: usize,
     buffer: Buffer,
     status: String,
+    command: String,
+    mode: EditorMode,
 }
 
 impl Editor {
@@ -21,6 +33,8 @@ impl Editor {
             current_line_length: buffer.get_line_length(0),
             buffer,
             status: String::new(),
+            command: String::new(),
+            mode: EditorMode::Normal,
         };
         Ok(editor)
     }
@@ -53,17 +67,27 @@ impl Editor {
             );
             self.terminal.goto(&Position {
                 x: 0,
-                y: self.terminal.size().1 as usize - 3,
+                y: self.terminal.size().1 as usize - 4,
             });
             self.terminal.write(&self.buffer.debug);
 
             // Status bar
-            self.status = format!("col {} | row {} | line {}", self.cursor_position.x, self.cursor_position.y, self.current_line_length);
+            self.status = format!(
+                "{}:{} | {}",
+                self.cursor_position.y, self.cursor_position.x, self.current_line_length
+            );
+            self.terminal.goto(&Position {
+                x: 0,
+                y: self.terminal.size().1 as usize - 2,
+            });
+            self.terminal.write(&self.status);
+
+            // Command
             self.terminal.goto(&Position {
                 x: 0,
                 y: self.terminal.size().1 as usize - 1,
             });
-            self.terminal.write(&self.status);
+            self.terminal.write(&self.command);
 
             // Draw buffer
             self.terminal.goto(&Position::default());
@@ -86,14 +110,37 @@ impl Editor {
                         .unwrap();
 
                     if c == '\n' {
-                        self.buffer.insert_new_line(offset);
-                        self.cursor_position.x = 0;
-                        self.cursor_position.y += 1;
+                        match self.mode {
+                            EditorMode::Normal => self.move_down(),
+                            EditorMode::Insert => {
+                                self.buffer.insert_new_line(offset);
+                                self.cursor_position.x = 0;
+                                self.cursor_position.y += 1;
+                            }
+                            EditorMode::Command => self.run_command(),
+                        }
+                    } else if c == ':' && self.mode == EditorMode::Normal {
+                        self.mode = EditorMode::Command;
+                        self.command.push(':');
                     } else {
-                        self.buffer.insert(c.to_string().as_str(), offset);
-                        self.cursor_position.x += 1;
+                        match self.mode {
+                            EditorMode::Insert => {
+                                self.buffer.insert(c.to_string().as_str(), offset);
+                                self.cursor_position.x += 1;
+                            }
+                            EditorMode::Command => {
+                                self.command.push(c);
+                            }
+                            _ => self.handle_key_normal_mode(c),
+                        }
                     }
                     self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
+                }
+                Key::Esc => {
+                    if self.mode == EditorMode::Insert {
+                        self.mode = EditorMode::Normal;
+                        self.command.clear();
+                    }
                 }
                 Key::Ctrl(c) => {
                     if c == 'q' {
@@ -102,52 +149,48 @@ impl Editor {
                     }
                 }
                 Key::Backspace => {
-                    let offset = self
-                        .buffer
-                        .get_offset_from_position(&self.cursor_position)
-                        .unwrap();
-
-                    if self.cursor_position.x > 0 {
-                        self.cursor_position.x -= 1;
-                        self.buffer.delete(offset - 1, 1);
-                    } else if self.cursor_position.y > 0 {
-                        let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
-                        self.cursor_position.x = line_len;
-                        self.cursor_position.y -= 1;
-                        self.buffer.delete(offset - 2, 2);
-                    } else {
-                        // empty
+                    if self.mode == EditorMode::Command && !self.command.is_empty() {
+                        self.command.pop();
                         continue;
                     }
-                    
-                    self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
-                }
-                Key::Left => {
-                    if self.cursor_position.x > 0 {
-                        self.cursor_position.x -= 1;
+
+                    if self.mode == EditorMode::Insert {
+                        let offset = self
+                            .buffer
+                            .get_offset_from_position(&self.cursor_position)
+                            .unwrap();
+
+                        if self.cursor_position.x > 0 {
+                            self.cursor_position.x -= 1;
+                            self.buffer.delete(offset - 1, 1);
+                        } else if self.cursor_position.y > 0 {
+                            let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
+                            self.cursor_position.x = line_len;
+                            self.cursor_position.y -= 1;
+                            self.buffer.delete(offset - 2, 2);
+                            self.current_line_length = line_len;
+                        } else {
+                            // empty
+                            continue;
+                        }
+
+                        self.current_line_length =
+                            self.buffer.get_line_length(self.cursor_position.y);
+                    } else if self.mode == EditorMode::Normal {
+                        if self.cursor_position.x > 0 {
+                            self.cursor_position.x -= 1;
+                        } else if self.cursor_position.y > 0 {
+                            let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
+                            self.cursor_position.x = line_len;
+                            self.cursor_position.y -= 1;
+                            self.current_line_length = line_len;
+                        }
                     }
                 }
-                Key::Right => {
-                    let new_position = Position {
-                        x: self.cursor_position.x + 1,
-                        y: self.cursor_position.y,
-                    };
-                    if self.is_valid_column(&new_position) {
-                        self.cursor_position.x += 1;
-                    }
-                }
-                Key::Up => {
-                    if self.cursor_position.y > 0 {
-                        self.cursor_position.y -= 1;
-                    }
-                    self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
-                }
-                Key::Down => {
-                    if self.is_valid_line(self.cursor_position.y + 1) {
-                        self.cursor_position.y += 1;
-                    }
-                    self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
-                }
+                Key::Left => self.move_left(),
+                Key::Right => self.move_right(),
+                Key::Up => self.move_up(),
+                Key::Down => self.move_down(),
                 _ => {
                     dbg!(&key);
                 }
@@ -155,13 +198,64 @@ impl Editor {
         }
     }
 
+    fn run_command(&mut self) {
+        if self.command == ":q" {
+            self.terminal.clear();
+            process::exit(1);
+        }
+        self.command.clear();
+    }
+
+    fn handle_key_normal_mode(&mut self, key: char) {
+        match key {
+            'i' => {
+                self.mode = EditorMode::Insert;
+                self.command = "-- INSERT --".to_string();
+            }
+            'k' => self.move_up(),
+            'j' => self.move_down(),
+            'h' => self.move_left(),
+            'l' => self.move_right(),
+            _ => {}
+        }
+    }
+
+    fn move_up(&mut self) {
+        if self.cursor_position.y > 0 {
+            self.cursor_position.y -= 1;
+        }
+        self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
+    }
+
+    fn move_down(&mut self) {
+        if self.is_valid_line(self.cursor_position.y + 1) {
+            self.cursor_position.y += 1;
+        }
+        self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
+    }
+
+    fn move_right(&mut self) {
+        let new_position = Position {
+            x: self.cursor_position.x + 1,
+            y: self.cursor_position.y,
+        };
+        if self.is_valid_column(&new_position) {
+            self.cursor_position.x += 1;
+        }
+    }
+    fn move_left(&mut self) {
+        if self.cursor_position.x > 0 {
+            self.cursor_position.x -= 1;
+        }
+    }
+
     /// Check if the buffer contains the line. Use 0-based alignment.
-    pub fn is_valid_line(&self, line: usize) -> bool {
+    fn is_valid_line(&self, line: usize) -> bool {
         line < self.buffer.get_total_lines()
     }
 
     /// Check if the buffer contains the column for the line. Use 0-based alignment.
-    pub fn is_valid_column(&self, position: &Position) -> bool {
+    fn is_valid_column(&self, position: &Position) -> bool {
         if position.y + 1 == self.buffer.get_total_lines()
             && position.x == 0
             && self.current_line_length == 0

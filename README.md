@@ -1,12 +1,23 @@
 # Nimbus Text Editor
 
-Nimbus is a terminal-based text editor. It is a personal study project and is based on the hecto editor.
+Nimbus is a terminal-based text editor. It serves as my personal study project.
 
-## Technical details
+**Features**
+- Basic text editing
+- Incremental Search
+- Basic syntax highlighting
 
-### Piece Table
--
+Supported file types for highlighting:
+- Rust
+- toml
+
+## Implementation
+**Piece Table**
+The text buffer is implemented with a piece table data structure.
+It allows fast insertion and deletion times.
+It also does not require much meta-data per line to be stored.
 
 ### References:
-[Hector editor in Rust](https://www.flenker.blog/hecto/)  
-[Kilo editor in C](https://viewsourcecode.org/snaptoken/kilo/index.html)
+[Simple Explanation of Piece Table](https://darrenburns.net/posts/piece-table/)
+[Piece Table wikipedia](https://en.wikipedia.org/wiki/Piece_table)
+[Piece table implementation in JavaScript](https://github.com/sparkeditor/piece-table)
