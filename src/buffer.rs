@@ -103,15 +103,9 @@ impl Buffer {
                 Source::Add => &self.line_starts_add,
             };
 
-            let skip = match piece.source {
-                Source::Data => 1,
-                _ => 0,
-            };
-
             let line_starts_len = line_starts
                 .iter()
-                .skip(skip)
-                .filter(|x| (piece.offset..piece.offset + piece.length).contains(x))
+                .filter(|x| **x != 0 && (piece.offset..piece.offset + piece.length).contains(x))
                 .count();
 
             if line_starts_len == 0 {
@@ -127,8 +121,7 @@ impl Buffer {
 
             if let Some(line_start) = line_starts
                 .iter()
-                .filter(|x| (piece.offset..piece.offset + piece.length).contains(x))
-                .skip(skip)
+                .filter(|x| **x != 0 && (piece.offset..piece.offset + piece.length).contains(x))
                 .nth(y - 1)
             {
                 offset += line_start + 1 - piece.offset;
@@ -257,12 +250,10 @@ impl Buffer {
         }
     }
 
-    pub fn delete(&mut self, position: &Position, count: usize) {
+    pub fn delete(&mut self, offset: usize, count: usize) {
         if count == 0 {
             return;
         }
-
-        let offset = self.get_offset_from_position(position).unwrap();
 
         let (initial_piece_idx, initial_buffer_offset);
         let (final_piece_idx, final_buffer_offset);

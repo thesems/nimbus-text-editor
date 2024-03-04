@@ -97,44 +97,53 @@ impl Editor {
                     }
                 }
                 Key::Backspace => {
+                    let offset = self
+                        .buffer
+                        .get_offset_from_position(&self.cursor_position)
+                        .unwrap();
+
                     if self.cursor_position.x > 0 {
                         self.cursor_position.x -= 1;
-                        self.buffer.delete(&self.cursor_position, 1);
+                        self.buffer.delete(offset - 1, 1);
                     } else if self.cursor_position.y > 0 {
                         let line_length = self.buffer.get_line_length(self.cursor_position.y - 1);
                         self.cursor_position.x = line_length;
                         self.cursor_position.y -= 1;
-                        self.buffer.delete(&self.cursor_position, 2);
+                        self.buffer.delete(offset - 2, 2);
                     } else {
                         // empty
                         continue;
                     }
                 }
                 Key::Left => {
-                    if self.cursor_position.x > 0 {
-                        self.cursor_position.x -= 1;
-                    }
+                    // if self.cursor_position.x > 0 {
+                    //     self.cursor_position.x -= 1;
+                    // }
+                    self.cursor_position.x -= 1;
                 }
                 Key::Right => {
-                    let new_position = Position {
-                        x: self.cursor_position.x + 1,
-                        y: self.cursor_position.y,
-                    };
-                    if self.buffer.is_valid_column(&new_position) {
-                        self.cursor_position.x += 1;
-                    }
+                    // let new_position = Position {
+                    //     x: self.cursor_position.x + 1,
+                    //     y: self.cursor_position.y,
+                    // };
+                    // if self.buffer.is_valid_column(&new_position) {
+                    //     self.cursor_position.x += 1;
+                    // }
+                    self.cursor_position.x += 1;
                 }
                 Key::Up => {
-                    if self.cursor_position.y > 0
-                        && self.buffer.is_valid_line(self.cursor_position.y - 1)
-                    {
-                        self.cursor_position.y -= 1;
-                    }
+                    self.cursor_position.y -= 1;
+                    // if self.cursor_position.y > 0
+                    //     && self.buffer.is_valid_line(self.cursor_position.y - 1)
+                    // {
+                    //     self.cursor_position.y -= 1;
+                    // }
                 }
                 Key::Down => {
-                    if self.buffer.is_valid_line(self.cursor_position.y + 1) {
-                        self.cursor_position.y += 1;
-                    }
+                    self.cursor_position.y += 1;
+                    // if self.buffer.is_valid_line(self.cursor_position.y + 1) {
+                    //     self.cursor_position.y += 1;
+                    // }
                 }
                 _ => {
                     dbg!(&key);
