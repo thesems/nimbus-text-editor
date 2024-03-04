@@ -6,6 +6,7 @@ Nimbus is a terminal-based text editor. It serves as my personal study project.
 - Basic text editing
 - Incremental Search
 - Basic syntax highlighting
+- Basic Vim-like motions
 
 Supported file types for highlighting:
 - Rust

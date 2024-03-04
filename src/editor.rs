@@ -27,22 +27,32 @@ pub struct Editor {
 
 impl Editor {
     pub fn new(buffer: Buffer) -> Result<Editor, Error> {
-        let editor = Editor {
+        let mut editor = Editor {
             terminal: Terminal::new()?,
             cursor_position: Position::default(),
-            current_line_length: buffer.get_line_length(0),
+            current_line_length: 0,
             buffer,
             status: String::new(),
             command: String::new(),
             mode: EditorMode::Normal,
         };
+
+        editor.cursor_position = Position::default();
+        editor.current_line_length = editor.buffer.get_line_length(editor.cursor_position.y);
+
         Ok(editor)
     }
 
-    pub fn set_buffer(&mut self, buffer: Buffer) {
-        self.current_line_length = buffer.get_line_length(self.cursor_position.y);
-        self.cursor_position = Position::default();
+    pub fn load_buffer(&mut self, buffer: Buffer) {
         self.buffer = buffer;
+        self.current_line_length = self.buffer.get_line_length(0);
+    }
+
+    fn adjusted_cursor_position(&self) -> Position {
+        Position::new(
+            std::cmp::min(self.cursor_position.x, self.current_line_length),
+            self.cursor_position.y,
+        )
     }
 
     pub fn main_loop(&mut self) {
@@ -50,55 +60,16 @@ impl Editor {
         loop {
             self.terminal.clear();
 
-            // Debug bar
-            let debug_offset = self
-                .buffer
-                .get_offset_from_position(&self.cursor_position)
-                .unwrap_or(0);
-
-            self.buffer.debug = format!(
-                "nl_data={:?} | nl_add={:?} | offset={} | pieces={:?} | {:?}", // | data={:?}",
-                self.buffer.line_starts_data,
-                self.buffer.line_starts_add,
-                debug_offset,
-                self.buffer.pieces,
-                self.buffer.get(),
-                // self.buffer.data
-            );
-            self.terminal.goto(&Position {
-                x: 0,
-                y: self.terminal.size().1 as usize - 4,
-            });
-            self.terminal.write(&self.buffer.debug);
-
-            // Status bar
-            self.status = format!(
-                "{}:{} | {}",
-                self.cursor_position.y, self.cursor_position.x, self.current_line_length
-            );
-            self.terminal.goto(&Position {
-                x: 0,
-                y: self.terminal.size().1 as usize - 2,
-            });
-            self.terminal.write(&self.status);
-
-            // Command
-            self.terminal.goto(&Position {
-                x: 0,
-                y: self.terminal.size().1 as usize - 1,
-            });
-            self.terminal.write(&self.command);
-
             // Draw buffer
             self.terminal.goto(&Position::default());
             self.terminal.write(&self.buffer.get());
 
-            // Position cursor
-            self.terminal.goto(&Position::new(
-                std::cmp::min(self.cursor_position.x, self.current_line_length),
-                self.cursor_position.y,
-            ));
+            self.draw_status_bar();
+            self.draw_command();
+            self.draw_debug();
 
+            // Position cursor
+            self.terminal.goto(&self.adjusted_cursor_position());
             self.terminal.flush();
 
             let key = self.terminal.read_key(&stdin).unwrap();
@@ -113,18 +84,21 @@ impl Editor {
                         match self.mode {
                             EditorMode::Normal => self.move_down(),
                             EditorMode::Insert => {
+                                self.reset_cursor();
                                 self.buffer.insert_new_line(offset);
                                 self.cursor_position.x = 0;
                                 self.cursor_position.y += 1;
                             }
-                            EditorMode::Command => self.run_command(),
+                            EditorMode::Command => self.run_command().unwrap_or(()),
                         }
                     } else if c == ':' && self.mode == EditorMode::Normal {
                         self.mode = EditorMode::Command;
+                        self.command.clear();
                         self.command.push(':');
                     } else {
                         match self.mode {
                             EditorMode::Insert => {
+                                self.reset_cursor();
                                 self.buffer.insert(c.to_string().as_str(), offset);
                                 self.cursor_position.x += 1;
                             }
@@ -140,6 +114,9 @@ impl Editor {
                     if self.mode == EditorMode::Insert {
                         self.mode = EditorMode::Normal;
                         self.command.clear();
+                    } else if self.mode == EditorMode::Command {
+                        self.mode = EditorMode::Normal;
+                        self.command.clear();
                     }
                 }
                 Key::Ctrl(c) => {
@@ -147,12 +124,17 @@ impl Editor {
                         self.terminal.clear();
                         break;
                     }
+                    if c == 'w' {
+                        self.save_buffer().unwrap();
+                    }
                 }
                 Key::Backspace => {
                     if self.mode == EditorMode::Command && !self.command.is_empty() {
                         self.command.pop();
                         continue;
                     }
+
+                    self.reset_cursor();
 
                     if self.mode == EditorMode::Insert {
                         let offset = self
@@ -198,12 +180,23 @@ impl Editor {
         }
     }
 
-    fn run_command(&mut self) {
+    fn run_command(&mut self) -> std::io::Result<()> {
         if self.command == ":q" {
             self.terminal.clear();
             process::exit(1);
         }
-        self.command.clear();
+        if self.command == ":w" {
+            self.save_buffer()?;
+        } else {
+            self.command.clear();
+        }
+        Ok(())
+    }
+
+    fn save_buffer(&mut self) -> std::io::Result<()> {
+        self.buffer.save_file(self.buffer.file_path())?;
+        self.command = format!("-- File saved to {}.", self.buffer.file_path());
+        Ok(())
     }
 
     fn handle_key_normal_mode(&mut self, key: char) {
@@ -235,6 +228,7 @@ impl Editor {
     }
 
     fn move_right(&mut self) {
+        self.reset_cursor();
         let new_position = Position {
             x: self.cursor_position.x + 1,
             y: self.cursor_position.y,
@@ -243,9 +237,17 @@ impl Editor {
             self.cursor_position.x += 1;
         }
     }
+
     fn move_left(&mut self) {
+        self.reset_cursor();
         if self.cursor_position.x > 0 {
             self.cursor_position.x -= 1;
+        }
+    }
+
+    fn reset_cursor(&mut self) {
+        if self.cursor_position.x > self.current_line_length {
+            self.cursor_position.x = self.current_line_length;
         }
     }
 
@@ -266,5 +268,48 @@ impl Editor {
             return false;
         }
         true
+    }
+
+    fn draw_command(&mut self) {
+        self.terminal.goto(&Position {
+            x: 0,
+            y: self.terminal.size().1 as usize - 1,
+        });
+        self.terminal.write(&self.command);
+    }
+
+    fn draw_status_bar(&mut self) {
+        self.status = format!(
+            "{}:{} | {}",
+            self.cursor_position.y, self.cursor_position.x, self.current_line_length
+        );
+        self.terminal.goto(&Position {
+            x: 0,
+            y: self.terminal.size().1 as usize - 2,
+        });
+        self.terminal.write(&self.status);
+    }
+
+    fn draw_debug(&mut self) {
+        // Debug bar
+        let debug_offset = self
+            .buffer
+            .get_offset_from_position(&self.adjusted_cursor_position())
+            .unwrap_or(0);
+
+        let debug = format!(
+            "nl_data={:?} | nl_add={:?} | offset={} | pieces={:?} | {:?}", // | data={:?}",
+            self.buffer.line_starts_data,
+            self.buffer.line_starts_add,
+            debug_offset,
+            self.buffer.pieces,
+            self.buffer.get(),
+            // self.buffer.data
+        );
+        self.terminal.goto(&Position {
+            x: 0,
+            y: self.terminal.size().1 as usize - 4,
+        });
+        self.terminal.write(&debug);
     }
 }

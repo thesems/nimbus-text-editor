@@ -1,38 +1,22 @@
 #[cfg(test)]
 mod tests;
 
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
+
 use crate::piece::{Piece, Source};
 use crate::position::Position;
-use std::{fs::File, io::Read};
 
 #[derive(Default)]
 pub struct Buffer {
     pub data: String,
     pub add: String,
     pub pieces: Vec<Piece>,
-    pub debug: String,
-
     pub line_starts_data: Vec<usize>,
     pub line_starts_add: Vec<usize>,
+    file_path: String,
 }
 impl Buffer {
-    /// Returns a Result of a Buffer loaded from a file.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// if let Some(buffer) = Buffer::from_file("./test.txt") {
-    ///     // to something
-    /// }
-    /// ```
-    ///
-    pub fn from_file(file_path: &str) -> std::io::Result<Buffer> {
-        let mut file = File::open(file_path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        Ok(Buffer::from_string(contents))
-    }
-
     pub fn from_string(mut data: String) -> Buffer {
         if !data.contains("\r\n") {
             data = data.replace('\n', "\r\n");
@@ -52,10 +36,28 @@ impl Buffer {
             data,
             add: String::new(),
             pieces: vec![Piece::new(Source::Data, 0, length)],
-            debug: String::new(),
             line_starts_data: new_lines,
             line_starts_add: vec![],
+            file_path: String::new(),
         }
+    }
+
+    pub fn from_file(file_path: &str) -> std::io::Result<Buffer> {
+        let mut file = File::open(file_path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let mut buffer = Buffer::from_string(contents);
+        buffer.file_path = file_path.to_string();
+        Ok(buffer)
+    }
+
+    pub fn file_path(&self) -> &str {
+        self.file_path.as_str()
+    }
+
+    pub fn save_file(&self, file_path: &str) -> std::io::Result<()> {
+        fs::write(file_path, self.get())?;
+        Ok(())
     }
 
     /// Find the piece that contains the logical offset and return its index and

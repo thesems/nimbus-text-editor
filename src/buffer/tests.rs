@@ -56,7 +56,10 @@ fn test_find_piece_from_offset_modified_buffer() {
     buffer.delete(33, 2);
     buffer.insert_new_line(5);
 
-    assert_eq!(buffer.get(), "File \r\nis read.\r\nThe hero has lied.The end.");
+    assert_eq!(
+        buffer.get(),
+        "File \r\nis read.\r\nThe hero has lied.The end."
+    );
     assert_eq!(buffer.find_piece_from_offset(4).unwrap().0, 0);
     assert_eq!(buffer.find_piece_from_offset(5).unwrap().0, 0);
     assert_eq!(buffer.find_piece_from_offset(6).unwrap().0, 1);
@@ -73,7 +76,10 @@ fn test_find_piece_from_offset_modified_buffer_2() {
     buffer.delete(13, 2);
 
     assert_eq!(buffer.get(), "File is read.The hero lied.\r\nThe end.");
-    assert_eq!(buffer.get_offset_from_position(&Position::new(0, 1)), Some(29));
+    assert_eq!(
+        buffer.get_offset_from_position(&Position::new(0, 1)),
+        Some(29)
+    );
 }
 
 #[test]
@@ -201,4 +207,17 @@ fn test_get_line_length() {
     assert_eq!(buffer.get_line_length(2), 8);
     assert_eq!(buffer.get_line_length(3), 0);
     assert_eq!(buffer.get_line_length(4), 0);
+}
+
+#[test]
+fn test_delete_2() {
+    let mut buffer = Buffer::from_string(
+        "File is read.\r\nThe hero lied.\r\nThe end.\r\nBensu.\r\nHello.\r\nlo.\r\n".to_string(),
+    );
+
+    buffer.delete(57, 5);
+    assert_eq!(
+        buffer.get(),
+        "File is read.\r\nThe hero lied.\r\nThe end.\r\nBensu.\r\nHello.\r\n".to_string()
+    );
 }
