@@ -20,6 +20,6 @@ fn main() -> Result<(), Error> {
     };
 
     let mut editor = Editor::new(buffer)?;
-    editor.main_loop();
+    editor.run();
     Ok(())
 }

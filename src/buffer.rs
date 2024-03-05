@@ -1,11 +1,21 @@
 #[cfg(test)]
 mod tests;
 
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::{fmt, io};
+use std::fs::{self, File};
+use std::io::{ErrorKind, Read};
 
 use crate::piece::{Piece, Source};
 use crate::position::Position;
+
+#[derive(Debug)]
+struct FilePathUndefined;
+
+impl fmt::Display for FilePathUndefined {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "File path not defined.")
+    }
+}
 
 #[derive(Default)]
 pub struct Buffer {
@@ -14,7 +24,7 @@ pub struct Buffer {
     pub pieces: Vec<Piece>,
     pub line_starts_data: Vec<usize>,
     pub line_starts_add: Vec<usize>,
-    file_path: String,
+    file_path: Option<String>,
 }
 impl Buffer {
     pub fn from_string(mut data: String) -> Buffer {
@@ -38,7 +48,7 @@ impl Buffer {
             pieces: vec![Piece::new(Source::Data, 0, length)],
             line_starts_data: new_lines,
             line_starts_add: vec![],
-            file_path: String::new(),
+            file_path: Some(String::new()),
         }
     }
 
@@ -47,17 +57,32 @@ impl Buffer {
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
         let mut buffer = Buffer::from_string(contents);
-        buffer.file_path = file_path.to_string();
+        buffer.file_path = Some(file_path.to_string());
         Ok(buffer)
     }
 
-    pub fn file_path(&self) -> &str {
-        self.file_path.as_str()
+    pub fn file_path(&self) -> Option<&str> {
+        if let Some(path) = self.file_path.as_ref() {
+            return Some(path.as_str());
+        }
+        None
     }
 
-    pub fn save_file(&self, file_path: &str) -> std::io::Result<()> {
-        fs::write(file_path, self.get())?;
-        Ok(())
+    pub fn set_file_path(&mut self, file_path: String) {
+        self.file_path = Some(file_path);
+    }
+
+    pub fn save_file(&self) -> std::io::Result<&str> {
+        if let Some(path) = self.file_path.as_ref() {
+            fs::write(path, self.get())?;
+            Ok(path.as_str())
+        } else {
+            // return error here
+            Err(io::Error::new(
+                ErrorKind::Other,
+                "Variable file_path not set.",
+            ))
+        }
     }
 
     /// Find the piece that contains the logical offset and return its index and

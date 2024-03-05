@@ -2,10 +2,7 @@
 mod tests;
 
 use crate::{buffer::Buffer, position::Position, terminal::Terminal};
-use std::{
-    io::{stdin, Error},
-    process,
-};
+use std::{env, io::{stdin, Error, Stdin}};
 use termion::event::Key;
 
 #[derive(PartialEq)]
@@ -23,6 +20,7 @@ pub struct Editor {
     status: String,
     command: String,
     mode: EditorMode,
+    running: bool,
 }
 
 impl Editor {
@@ -35,6 +33,7 @@ impl Editor {
             status: String::new(),
             command: String::new(),
             mode: EditorMode::Normal,
+            running: true,
         };
 
         editor.cursor_position = Position::default();
@@ -55,9 +54,9 @@ impl Editor {
         )
     }
 
-    pub fn main_loop(&mut self) {
+    pub fn run(&mut self) {
         let stdin = stdin();
-        loop {
+        while self.running {
             self.terminal.clear();
 
             // Draw buffer
@@ -72,130 +71,150 @@ impl Editor {
             self.terminal.goto(&self.adjusted_cursor_position());
             self.terminal.flush();
 
-            let key = self.terminal.read_key(&stdin).unwrap();
-            match key {
-                Key::Char(c) => {
+            self.handle_user_input(&stdin);
+        }
+    }
+
+    fn handle_user_input(&mut self, stdin: &Stdin) {
+        let key = self.terminal.read_key(stdin).unwrap();
+        match key {
+            Key::Char(c) => {
+                let offset = self
+                    .buffer
+                    .get_offset_from_position(&self.cursor_position)
+                    .unwrap();
+
+                if c == '\n' {
+                    match self.mode {
+                        EditorMode::Normal => self.move_down(),
+                        EditorMode::Insert => {
+                            self.reset_cursor();
+                            self.buffer.insert_new_line(offset);
+                            self.cursor_position.x = 0;
+                            self.cursor_position.y += 1;
+                        }
+                        EditorMode::Command => self.run_command().unwrap_or(()),
+                    }
+                } else if c == ':' && self.mode == EditorMode::Normal {
+                    self.mode = EditorMode::Command;
+                    self.command.clear();
+                    self.command.push(':');
+                } else {
+                    match self.mode {
+                        EditorMode::Insert => {
+                            self.reset_cursor();
+                            self.buffer.insert(c.to_string().as_str(), offset);
+                            self.cursor_position.x += 1;
+                        }
+                        EditorMode::Command => {
+                            self.command.push(c);
+                        }
+                        _ => self.handle_key_normal_mode(c),
+                    }
+                }
+                self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
+            }
+            Key::Esc => {
+                if self.mode == EditorMode::Insert || self.mode == EditorMode::Command {
+                    self.mode = EditorMode::Normal;
+                    self.command.clear();
+                }
+            }
+            Key::Ctrl(c) => {
+                if c == 'q' {
+                    self.exit();
+                }
+                if c == 'w' {
+                    self.save_buffer().unwrap();
+                }
+            }
+            Key::Backspace => {
+                if self.mode == EditorMode::Command && !self.command.is_empty() {
+                    self.command.pop();
+                    return;
+                }
+
+                self.reset_cursor();
+
+                if self.mode == EditorMode::Insert {
                     let offset = self
                         .buffer
                         .get_offset_from_position(&self.cursor_position)
                         .unwrap();
 
-                    if c == '\n' {
-                        match self.mode {
-                            EditorMode::Normal => self.move_down(),
-                            EditorMode::Insert => {
-                                self.reset_cursor();
-                                self.buffer.insert_new_line(offset);
-                                self.cursor_position.x = 0;
-                                self.cursor_position.y += 1;
-                            }
-                            EditorMode::Command => self.run_command().unwrap_or(()),
-                        }
-                    } else if c == ':' && self.mode == EditorMode::Normal {
-                        self.mode = EditorMode::Command;
-                        self.command.clear();
-                        self.command.push(':');
+                    if self.cursor_position.x > 0 {
+                        self.cursor_position.x -= 1;
+                        self.buffer.delete(offset - 1, 1);
+                    } else if self.cursor_position.y > 0 {
+                        let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
+                        self.cursor_position.x = line_len;
+                        self.cursor_position.y -= 1;
+                        self.buffer.delete(offset - 2, 2);
+                        self.current_line_length = line_len;
                     } else {
-                        match self.mode {
-                            EditorMode::Insert => {
-                                self.reset_cursor();
-                                self.buffer.insert(c.to_string().as_str(), offset);
-                                self.cursor_position.x += 1;
-                            }
-                            EditorMode::Command => {
-                                self.command.push(c);
-                            }
-                            _ => self.handle_key_normal_mode(c),
-                        }
+                        // empty
+                        return;
                     }
+
                     self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
-                }
-                Key::Esc => {
-                    if self.mode == EditorMode::Insert {
-                        self.mode = EditorMode::Normal;
-                        self.command.clear();
-                    } else if self.mode == EditorMode::Command {
-                        self.mode = EditorMode::Normal;
-                        self.command.clear();
+                } else if self.mode == EditorMode::Normal {
+                    if self.cursor_position.x > 0 {
+                        self.cursor_position.x -= 1;
+                    } else if self.cursor_position.y > 0 {
+                        let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
+                        self.cursor_position.x = line_len;
+                        self.cursor_position.y -= 1;
+                        self.current_line_length = line_len;
                     }
                 }
-                Key::Ctrl(c) => {
-                    if c == 'q' {
-                        self.terminal.clear();
-                        break;
-                    }
-                    if c == 'w' {
-                        self.save_buffer().unwrap();
-                    }
-                }
-                Key::Backspace => {
-                    if self.mode == EditorMode::Command && !self.command.is_empty() {
-                        self.command.pop();
-                        continue;
-                    }
-
-                    self.reset_cursor();
-
-                    if self.mode == EditorMode::Insert {
-                        let offset = self
-                            .buffer
-                            .get_offset_from_position(&self.cursor_position)
-                            .unwrap();
-
-                        if self.cursor_position.x > 0 {
-                            self.cursor_position.x -= 1;
-                            self.buffer.delete(offset - 1, 1);
-                        } else if self.cursor_position.y > 0 {
-                            let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
-                            self.cursor_position.x = line_len;
-                            self.cursor_position.y -= 1;
-                            self.buffer.delete(offset - 2, 2);
-                            self.current_line_length = line_len;
-                        } else {
-                            // empty
-                            continue;
-                        }
-
-                        self.current_line_length =
-                            self.buffer.get_line_length(self.cursor_position.y);
-                    } else if self.mode == EditorMode::Normal {
-                        if self.cursor_position.x > 0 {
-                            self.cursor_position.x -= 1;
-                        } else if self.cursor_position.y > 0 {
-                            let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
-                            self.cursor_position.x = line_len;
-                            self.cursor_position.y -= 1;
-                            self.current_line_length = line_len;
-                        }
-                    }
-                }
-                Key::Left => self.move_left(),
-                Key::Right => self.move_right(),
-                Key::Up => self.move_up(),
-                Key::Down => self.move_down(),
-                _ => {
-                    dbg!(&key);
-                }
+            }
+            Key::Left => self.move_left(),
+            Key::Right => self.move_right(),
+            Key::Up => self.move_up(),
+            Key::Down => self.move_down(),
+            _ => {
+                dbg!(&key);
             }
         }
     }
 
     fn run_command(&mut self) -> std::io::Result<()> {
-        if self.command == ":q" {
-            self.terminal.clear();
-            process::exit(1);
+        let tokens: Vec<&str> = self.command.split(':').collect();
+        if tokens.len() <= 1 {
+            return Ok(());
         }
-        if self.command == ":w" {
-            self.save_buffer()?;
-        } else {
-            self.command.clear();
+
+        match tokens[1] {
+            "q" => self.exit(),
+            "w" => self.save_buffer()?,
+            "wq" => {
+                self.save_buffer()?;
+                self.exit();
+            }
+            _ => {
+                if tokens[0].contains("-- Create file") {
+                    let path = format!("{}/{}", env::current_dir()?.display(), tokens[1]);
+                    self.buffer.set_file_path(path);
+                    self.command.clear();
+                    self.save_buffer()?;
+                }
+            }
         }
         Ok(())
     }
 
+    fn exit(&mut self) {
+        self.terminal.clear();
+        self.running = false;
+    }
+
     fn save_buffer(&mut self) -> std::io::Result<()> {
-        self.buffer.save_file(self.buffer.file_path())?;
-        self.command = format!("-- File saved to {}.", self.buffer.file_path());
+        if let Ok(file_path) = self.buffer.save_file() {
+            self.command = format!("-- File saved to {}.", file_path);
+        } else {
+            self.command = "-- Create file:".to_string();
+            self.mode = EditorMode::Command;
+        }
         Ok(())
     }
 
