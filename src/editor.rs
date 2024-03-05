@@ -3,7 +3,7 @@ use std::{
     env,
     io::{stdin, Error, Stdin},
 };
-use termion::event::Key;
+use termion::{color, event::Key};
 
 #[derive(PartialEq)]
 enum EditorMode {
@@ -16,30 +16,29 @@ pub struct Editor {
     terminal: Terminal,
     cursor_position: Position,
     current_line_length: usize,
-    buffer: Buffer,
     status: String,
     command: String,
     mode: EditorMode,
     running: bool,
+    untouched: bool,
+    debug_bar: bool,
+    buffer: Buffer,
 }
 
 impl Editor {
     pub fn new(buffer: Buffer) -> Result<Editor, Error> {
-        let mut editor = Editor {
+         Ok(Editor {
             terminal: Terminal::new()?,
             cursor_position: Position::default(),
-            current_line_length: 0,
-            buffer,
+            current_line_length: buffer.get_line_length(0),
             status: String::new(),
             command: String::new(),
             mode: EditorMode::Normal,
             running: true,
-        };
-
-        editor.cursor_position = Position::default();
-        editor.current_line_length = editor.buffer.get_line_length(editor.cursor_position.y);
-
-        Ok(editor)
+            untouched: buffer.file_path().is_none(),
+            debug_bar: true,
+            buffer,
+        })
     }
 
     pub fn load_buffer(&mut self, buffer: Buffer) {
@@ -59,10 +58,7 @@ impl Editor {
         while self.running {
             self.terminal.clear();
 
-            // Draw buffer
-            self.terminal.goto(&Position::default());
-            self.terminal.write(&self.buffer.get());
-
+            self.draw_buffer();
             self.draw_status_bar();
             self.draw_command();
             self.draw_debug();
@@ -77,6 +73,8 @@ impl Editor {
 
     fn handle_user_input(&mut self, stdin: &Stdin) {
         let key = self.terminal.read_key(stdin).unwrap();
+        self.untouched = false;
+
         match key {
             Key::Char(c) => {
                 let offset = self
@@ -186,19 +184,26 @@ impl Editor {
             return Ok(());
         }
 
-        match tokens[1] {
+        let pre_command = tokens[0];
+        let command = tokens[1];
+
+        match command {
             "q" => self.quit(),
             "w" => self.save_buffer()?,
             "wq" => {
                 self.save_buffer()?;
                 self.quit();
             }
+            "help" => self.print_help(),
+            "debug" => self.toggle_debug_bar(),
             _ => {
-                if tokens[0].contains("-- Create file") {
+                if pre_command.contains("-- Create file") {
                     let path = format!("{}/{}", env::current_dir()?.display(), tokens[1]);
                     self.buffer.set_file_path(path);
                     self.command.clear();
                     self.save_buffer()?;
+                } else {
+                    self.command = "Command not found!".to_string();
                 }
             }
         }
@@ -300,12 +305,43 @@ impl Editor {
         {
             return true;
         }
-        
+
         if self.current_line_length == 0 {
             return false;
         }
 
         true
+    }
+
+    fn draw_buffer(&mut self) {
+        self.terminal.goto(&Position::default());
+
+        if self.untouched {
+            let text = "Nimbus Text Editor";
+            let version = "Version 0.1.0";
+            let help = "Type :help for usage manual.";
+
+            let (w, h) = self.terminal.size();
+            let mut pos = Position::new(
+                w.saturating_div(2) as usize - (text.len() / 2),
+                h.saturating_div(2) as usize,
+            );
+
+            self.terminal.goto(&pos);
+            self.terminal.write_with_color(text, &color::Yellow);
+
+            pos.x = w.saturating_div(2) as usize - (version.len() / 2);
+            pos.y += 1;
+            self.terminal.goto(&pos);
+            self.terminal.write(version);
+           
+            pos.x = w.saturating_div(2) as usize - (help.len() / 2);
+            pos.y += 2;
+            self.terminal.goto(&pos);
+            self.terminal.write_with_color(help, &color::White);
+        } else {
+            self.terminal.write(&self.buffer.get());
+        }
     }
 
     fn draw_command(&mut self) {
@@ -317,6 +353,10 @@ impl Editor {
     }
 
     fn draw_status_bar(&mut self) {
+        if self.untouched {
+            return;
+        }
+
         self.status = format!(
             "{}:{} | {}",
             self.cursor_position.y, self.cursor_position.x, self.current_line_length
@@ -329,6 +369,10 @@ impl Editor {
     }
 
     fn draw_debug(&mut self) {
+        if self.untouched || !self.debug_bar {
+            return;
+        }
+
         // Debug bar
         let debug_offset = self
             .buffer
@@ -349,6 +393,16 @@ impl Editor {
             y: self.terminal.size().1 as usize - 4,
         });
         self.terminal.write(&debug);
+    }
+
+    /// Print the keybind information into the command bar.
+    fn print_help(&mut self) {
+        self.command = "<C-q> - Exit, <C-w> - Save | Command: :q - quit, :w - write, :debug - toggle debug bar".to_string();
+    }
+    
+    fn toggle_debug_bar(&mut self) {
+        self.debug_bar = !self.debug_bar;
+        self.command.clear();
     }
 }
 

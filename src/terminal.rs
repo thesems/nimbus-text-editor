@@ -1,5 +1,6 @@
 use std::io::{stdout, Error, Stdin, Stdout, Write};
 use termion::{
+    color,
     event::Key,
     input::TermRead,
     raw::{IntoRawMode, RawTerminal},
@@ -32,12 +33,12 @@ impl Terminal {
     pub fn clear(&self) {
         print!("{}", termion::clear::All);
     }
-    
+
     pub fn goto(&self, position: &Position) {
-        let ( x, y ) = position.get_terminal();
+        let (x, y) = position.get_terminal();
         print!("{}", termion::cursor::Goto(x, y));
     }
-    
+
     pub fn write(&self, buffer: &str) {
         print!("{}", buffer);
     }
@@ -48,5 +49,9 @@ impl Terminal {
 
     pub fn size(&self) -> (u16, u16) {
         self.size
+    }
+
+    pub fn write_with_color(&self, buffer: &str, color: &dyn color::Color) {
+        print!("{}{}{}", color::Fg(color), buffer, color::Fg(color::Reset));
     }
 }

@@ -19,20 +19,21 @@ Supported file types for highlighting:
 
 | Keybind       | Description |
 |-------------- | -------------- |
-| :         | Start a vim-like command input.     |
-| Ctrl-w    | Write changes to file.     |
-| Ctrl-q    | Quit.     |
-| Arrows    | Vertical/Horizontal Navigation |
-| h,j,k,l   | Vertical/Horizontal Navigation |
-| Home      | Go to start of line.     |
-| End       | Go to end of line.     |
+| :             | Start a vim-like command input.     |
+| Ctrl-w        | Write changes to file.     |
+| Ctrl-q        | Quit.     |
+| Arrows        | Vertical/Horizontal Navigation |
+| h,j,k,l       | Vertical/Horizontal Navigation |
+| Home          | Go to start of line.     |
+| End           | Go to end of line.     |
 
 **Commands**
 
 | Command | Description |
 |-------------- | -------------- |
-| w | Same as Ctrl-w |
-| q | Same as Ctrl-q |
+| w     | Same as Ctrl-w |
+| q     | Same as Ctrl-q |
+| debug | Toggle debug bar |
 
 
 ## Implementation
