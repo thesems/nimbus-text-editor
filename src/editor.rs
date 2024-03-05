@@ -122,7 +122,7 @@ impl Editor {
             }
             Key::Ctrl(c) => {
                 if c == 'q' {
-                    self.exit();
+                    self.quit();
                 }
                 if c == 'w' {
                     self.save_buffer().unwrap();
@@ -172,6 +172,8 @@ impl Editor {
             Key::Right => self.move_right(),
             Key::Up => self.move_up(),
             Key::Down => self.move_down(),
+            Key::Home => self.move_to_sol(),
+            Key::End => self.move_to_eol(),
             _ => {
                 dbg!(&key);
             }
@@ -185,11 +187,11 @@ impl Editor {
         }
 
         match tokens[1] {
-            "q" => self.exit(),
+            "q" => self.quit(),
             "w" => self.save_buffer()?,
             "wq" => {
                 self.save_buffer()?;
-                self.exit();
+                self.quit();
             }
             _ => {
                 if tokens[0].contains("-- Create file") {
@@ -203,7 +205,7 @@ impl Editor {
         Ok(())
     }
 
-    fn exit(&mut self) {
+    fn quit(&mut self) {
         self.terminal.clear();
         self.running = false;
     }
@@ -262,6 +264,16 @@ impl Editor {
         if self.cursor_position.x > 0 {
             self.cursor_position.x -= 1;
         }
+    }
+   
+    /// Moves the cursor to start of line.
+    fn move_to_sol(&mut self) {
+        self.cursor_position.x = 0;
+    }
+
+    /// Moves the cursor to end of line.
+    fn move_to_eol(&mut self) {
+        self.cursor_position.x = self.current_line_length;
     }
 
     fn reset_cursor(&mut self) {
