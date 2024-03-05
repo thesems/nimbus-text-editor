@@ -1,8 +1,8 @@
-#[cfg(test)]
-mod tests;
-
 use crate::{buffer::Buffer, position::Position, terminal::Terminal};
-use std::{env, io::{stdin, Error, Stdin}};
+use std::{
+    env,
+    io::{stdin, Error, Stdin},
+};
 use termion::event::Key;
 
 #[derive(PartialEq)]
@@ -265,7 +265,7 @@ impl Editor {
             self.cursor_position.x -= 1;
         }
     }
-   
+
     /// Moves the cursor to start of line.
     fn move_to_sol(&mut self) {
         self.cursor_position.x = 0;
@@ -288,16 +288,23 @@ impl Editor {
     }
 
     /// Check if the buffer contains the column for the line. Use 0-based alignment.
+    /// Allow 1 space after last character.
     fn is_valid_column(&self, position: &Position) -> bool {
+        if position.x > self.current_line_length {
+            return false;
+        }
+
         if position.y + 1 == self.buffer.get_total_lines()
             && position.x == 0
             && self.current_line_length == 0
         {
             return true;
         }
-        if self.current_line_length == 0 || position.x > self.current_line_length {
+        
+        if self.current_line_length == 0 {
             return false;
         }
+
         true
     }
 
@@ -342,5 +349,74 @@ impl Editor {
             y: self.terminal.size().1 as usize - 4,
         });
         self.terminal.write(&debug);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_valid_column() {
+        let buffer = Buffer::from_string("File is read.\r\nThe hero lied.\r\nThe end.".to_string());
+        let mut editor = Editor::new(buffer).unwrap();
+
+        assert!(editor.is_valid_column(&Position::new(0, 0)));
+        assert!(editor.is_valid_column(&Position::new(13, 0)));
+
+        editor.move_down();
+        assert!(editor.is_valid_column(&Position::new(0, 1)));
+        assert!(editor.is_valid_column(&Position::new(14, 1)));
+
+        editor.move_down();
+        assert!(editor.is_valid_column(&Position::new(0, 2)));
+        assert!(editor.is_valid_column(&Position::new(8, 2)));
+
+        // assert!(!buffer.is_valid_column(&Position { x: 0, y: 3 }));
+        // let file = String::from("File is read.\r\nThe hero lied.\r\nThe end.\r\n");
+        // let buffer = Buffer::from_string(file);
+        // assert!(buffer.is_valid_column(&Position { x: 0, y: 3 }));
+    }
+
+    #[test]
+    fn test_is_valid_line() {
+        let buffer = Buffer::from_string("File is read.\r\nThe hero lied.\r\nThe end.".to_string());
+        let editor = Editor::new(buffer).unwrap();
+
+        assert!(editor.is_valid_line(0));
+        assert!(editor.is_valid_line(1));
+        assert!(editor.is_valid_line(2));
+        assert!(!editor.is_valid_line(3));
+        assert!(!editor.is_valid_line(4));
+
+        let buffer =
+            Buffer::from_string("File is read.\r\nThe hero lied.\r\nThe end.\r\n".to_string());
+        let editor = Editor::new(buffer).unwrap();
+
+        assert!(editor.is_valid_line(3));
+        assert!(!editor.is_valid_line(4));
+    }
+
+    #[test]
+    fn test_editor_complex_1() {
+        let buffer =
+            Buffer::from_string("File is read.\r\nThe hero lied.\r\nThe end.\r\n".to_string());
+        let mut editor = Editor::new(buffer).unwrap();
+
+        editor.buffer.delete(29, 2);
+        assert_eq!(
+            editor.buffer.get(),
+            "File is read.\r\nThe hero lied.The end.\r\n"
+        );
+
+        assert_eq!(editor.buffer.get_line_length(1), 22);
+        assert_eq!(editor.buffer.get_total_lines(), 3);
+
+        editor.move_down();
+        assert!(editor.is_valid_column(&Position { x: 22, y: 1 }));
+        assert!(!editor.is_valid_column(&Position { x: 23, y: 1 }));
+        assert!(editor.is_valid_line(1));
+        assert!(editor.is_valid_line(2));
+        assert!(!editor.is_valid_line(3));
     }
 }
