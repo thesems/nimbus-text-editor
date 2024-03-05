@@ -77,17 +77,12 @@ impl Editor {
 
         match key {
             Key::Char(c) => {
-                let offset = self
-                    .buffer
-                    .get_offset_from_position(&self.cursor_position)
-                    .unwrap();
-
                 if c == '\n' {
                     match self.mode {
                         EditorMode::Normal => self.move_down(),
                         EditorMode::Insert => {
                             self.reset_cursor();
-                            self.buffer.insert_new_line(offset);
+                            self.buffer.insert_new_line(&self.cursor_position);
                             self.cursor_position.x = 0;
                             self.cursor_position.y += 1;
                         }
@@ -101,7 +96,7 @@ impl Editor {
                     match self.mode {
                         EditorMode::Insert => {
                             self.reset_cursor();
-                            self.buffer.insert(c.to_string().as_str(), offset);
+                            self.buffer.insert(c.to_string().as_str(), &self.cursor_position);
                             self.cursor_position.x += 1;
                         }
                         EditorMode::Command => {
@@ -135,19 +130,14 @@ impl Editor {
                 self.reset_cursor();
 
                 if self.mode == EditorMode::Insert {
-                    let offset = self
-                        .buffer
-                        .get_offset_from_position(&self.cursor_position)
-                        .unwrap();
-
                     if self.cursor_position.x > 0 {
                         self.cursor_position.x -= 1;
-                        self.buffer.delete(offset - 1, 1);
+                        self.buffer.delete(&self.cursor_position, 1);
                     } else if self.cursor_position.y > 0 {
                         let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
                         self.cursor_position.x = line_len;
                         self.cursor_position.y -= 1;
-                        self.buffer.delete(offset - 2, 2);
+                        self.buffer.delete(&self.cursor_position, 2);
                         self.current_line_length = line_len;
                     } else {
                         // empty
@@ -374,20 +364,7 @@ impl Editor {
         }
 
         // Debug bar
-        let debug_offset = self
-            .buffer
-            .get_offset_from_position(&self.adjusted_cursor_position())
-            .unwrap_or(0);
-
-        let debug = format!(
-            "nl_data={:?} | nl_add={:?} | offset={} | pieces={:?} | {:?}", // | data={:?}",
-            self.buffer.line_starts_data,
-            self.buffer.line_starts_add,
-            debug_offset,
-            self.buffer.pieces,
-            self.buffer.get(),
-            // self.buffer.data
-        );
+        let debug = self.buffer.get_debug_status(&self.adjusted_cursor_position());
         self.terminal.goto(&Position {
             x: 0,
             y: self.terminal.size().1 as usize - 4,
@@ -457,7 +434,7 @@ mod tests {
             Buffer::from_string("File is read.\r\nThe hero lied.\r\nThe end.\r\n".to_string());
         let mut editor = Editor::new(buffer).unwrap();
 
-        editor.buffer.delete(29, 2);
+        editor.buffer.delete(&Position::new(14, 1), 2); // 29
         assert_eq!(
             editor.buffer.get(),
             "File is read.\r\nThe hero lied.The end.\r\n"
