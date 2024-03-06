@@ -1,5 +1,12 @@
-use crate::{buffer::Buffer, position::Position, terminal::Terminal};
+use crate::{
+    buffer::Buffer,
+    file_extension::FileExtension,
+    highlighter::{Highlighter, RustHighlighter},
+    position::Position,
+    terminal::Terminal,
+};
 use std::{
+    collections::HashMap,
     env,
     io::{stdin, Error, Stdin},
 };
@@ -23,10 +30,16 @@ pub struct Editor {
     untouched: bool,
     debug_bar: bool,
     buffer: Buffer,
+    highlighters: HashMap<FileExtension, Box<dyn Highlighter>>,
 }
 
 impl Editor {
     pub fn new(buffer: Buffer) -> Result<Editor, Error> {
+        let mut highlighters = HashMap::new();
+        highlighters.insert(
+            FileExtension::Rust,
+            Box::<RustHighlighter>::default() as Box<dyn Highlighter>,
+        );
         Ok(Editor {
             terminal: Terminal::new()?,
             cursor_position: Position::default(),
@@ -38,6 +51,7 @@ impl Editor {
             untouched: buffer.file_path().is_none(),
             debug_bar: true,
             buffer,
+            highlighters,
         })
     }
 
@@ -162,7 +176,9 @@ impl Editor {
                     if self.cursor_position.x < self.current_line_length {
                         self.current_line_length -= 1;
                         self.buffer.delete(&self.cursor_position, 1);
-                    } else if self.cursor_position.x == self.current_line_length && self.cursor_position.x > 0 {
+                    } else if self.cursor_position.x == self.current_line_length
+                        && self.cursor_position.x > 0
+                    {
                         self.current_line_length -= 1;
                         self.cursor_position.x = self.current_line_length;
                         self.buffer.delete(&self.cursor_position, 1);
@@ -342,6 +358,8 @@ impl Editor {
             pos.y += 2;
             self.terminal.goto(&pos);
             self.terminal.write_with_color(help, &color::White);
+        } else if let Some(highlighter) = self.highlighters.get(&FileExtension::Rust) {
+            highlighter.highlight(&self.buffer.get(), &self.terminal);
         } else {
             self.terminal.write(&self.buffer.get());
         }

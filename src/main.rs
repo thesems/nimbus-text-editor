@@ -14,6 +14,8 @@ fn main() -> Result<(), Error> {
         }
     };
 
+    // let file_name = Some("test.txt");
+
     let buffer = match file_name {
         Some(path) => Buffer::from_file(path)?,
         None => Buffer::default(),

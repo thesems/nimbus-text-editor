@@ -3,7 +3,7 @@ use std::io::{ErrorKind, Read};
 use std::{fmt, io};
 
 use crate::piece_table::PieceTable;
-use crate::position::{self, Position};
+use crate::position::Position;
 
 #[derive(Debug)]
 struct FilePathUndefined;
@@ -70,7 +70,7 @@ impl Buffer {
     }
     
     pub fn insert_new_line(&mut self, position: &Position) {
-        if let Some(offset) = self.piece_table.get_offset_from_position(&position) {
+        if let Some(offset) = self.piece_table.get_offset_from_position(position) {
             self.piece_table.insert_new_line(offset);
         } else {
             // TODO: write warning to logs
@@ -78,7 +78,7 @@ impl Buffer {
     }
 
     pub fn insert(&mut self, text: &str, position: &Position) {
-        if let Some(offset) = self.piece_table.get_offset_from_position(&position) {
+        if let Some(offset) = self.piece_table.get_offset_from_position(position) {
             self.piece_table.insert(text, offset);
         } else {
             // TODO: write warning to logs
@@ -86,7 +86,7 @@ impl Buffer {
     }
 
     pub fn delete(&mut self, position: &Position, count: usize) {
-        if let Some(offset) = self.piece_table.get_offset_from_position(&position) {
+        if let Some(offset) = self.piece_table.get_offset_from_position(position) {
             self.piece_table.delete(offset, count);
         } else {
             // TODO: write warning to logs
