@@ -27,7 +27,7 @@ pub struct Editor {
 
 impl Editor {
     pub fn new(buffer: Buffer) -> Result<Editor, Error> {
-         Ok(Editor {
+        Ok(Editor {
             terminal: Terminal::new()?,
             cursor_position: Position::default(),
             current_line_length: buffer.get_line_length(0),
@@ -96,7 +96,8 @@ impl Editor {
                     match self.mode {
                         EditorMode::Insert => {
                             self.reset_cursor();
-                            self.buffer.insert(c.to_string().as_str(), &self.cursor_position);
+                            self.buffer
+                                .insert(c.to_string().as_str(), &self.cursor_position);
                             self.cursor_position.x += 1;
                         }
                         EditorMode::Command => {
@@ -153,6 +154,18 @@ impl Editor {
                         self.cursor_position.x = line_len;
                         self.cursor_position.y -= 1;
                         self.current_line_length = line_len;
+                    }
+                }
+            }
+            Key::Delete => {
+                if self.mode == EditorMode::Insert {
+                    if self.cursor_position.x < self.current_line_length {
+                        self.current_line_length -= 1;
+                        self.buffer.delete(&self.cursor_position, 1);
+                    } else if self.cursor_position.x == self.current_line_length && self.cursor_position.x > 0 {
+                        self.current_line_length -= 1;
+                        self.cursor_position.x = self.current_line_length;
+                        self.buffer.delete(&self.cursor_position, 1);
                     }
                 }
             }
@@ -324,7 +337,7 @@ impl Editor {
             pos.y += 1;
             self.terminal.goto(&pos);
             self.terminal.write(version);
-           
+
             pos.x = w.saturating_div(2) as usize - (help.len() / 2);
             pos.y += 2;
             self.terminal.goto(&pos);
@@ -364,7 +377,9 @@ impl Editor {
         }
 
         // Debug bar
-        let debug = self.buffer.get_debug_status(&self.adjusted_cursor_position());
+        let debug = self
+            .buffer
+            .get_debug_status(&self.adjusted_cursor_position());
         self.terminal.goto(&Position {
             x: 0,
             y: self.terminal.size().1 as usize - 4,
@@ -376,7 +391,7 @@ impl Editor {
     fn print_help(&mut self) {
         self.command = "<C-q> - Exit, <C-w> - Save | Command: :q - quit, :w - write, :debug - toggle debug bar".to_string();
     }
-    
+
     fn toggle_debug_bar(&mut self) {
         self.debug_bar = !self.debug_bar;
         self.command.clear();
