@@ -75,7 +75,7 @@ impl Editor {
             self.draw_buffer();
             self.draw_status_bar();
             self.draw_command();
-            self.draw_debug();
+            // self.draw_debug();
 
             // Position cursor
             self.terminal.goto(&self.adjusted_cursor_position());

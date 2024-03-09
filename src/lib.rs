@@ -6,3 +6,4 @@ pub mod piece;
 pub mod position;
 pub mod highlighter;
 pub mod file_extension;
+pub mod tokenizer;
