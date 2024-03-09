@@ -70,6 +70,7 @@ impl Editor {
     pub fn run(&mut self) {
         let stdin = stdin();
         while self.running {
+            self.terminal.hide_cursor();
             self.terminal.clear();
 
             self.draw_buffer();
@@ -79,6 +80,7 @@ impl Editor {
 
             // Position cursor
             self.terminal.goto(&self.adjusted_cursor_position());
+            self.terminal.show_cursor();
             self.terminal.flush();
 
             self.handle_user_input(&stdin);
