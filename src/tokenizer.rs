@@ -48,9 +48,20 @@ impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
     fn next(&mut self) -> Option<TokenType> {
         let mut token_type = None;
         self.token = "";
+        let mut string_constant = false;
 
         for (i, ch) in self.text.chars().skip(self.counter).enumerate() {
             let comp = &self.text[self.counter..self.counter + i + 1];
+
+            if string_constant {
+                if ch == '"' {
+                    token_type = Some(TokenType::Constant);
+                    self.token = comp;
+                    self.counter += i + 1;
+                    break;
+                }
+                continue;
+            }
 
             if comp.trim().is_empty() {
                 continue;
@@ -64,6 +75,11 @@ impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
                 self.token = comp;
                 self.counter += i + 1;
                 break;
+            }
+
+            if ch == '"' && !string_constant {
+                string_constant = true;
+                continue;
             }
 
             if self.symbols.contains(&ch) {
