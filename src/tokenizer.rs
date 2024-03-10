@@ -91,7 +91,7 @@ impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
                 keyword_end = !next_ch.unwrap().is_alphanumeric() && next_ch.unwrap() != '_';
             }
 
-            if self.keywords.contains(&comp.trim().to_string()) && keyword_end {
+            if keyword_end && self.keywords.contains(&comp.trim().to_string()) {
                 token_type = Some(TokenType::Keyword);
                 self.token = comp;
                 self.counter += i + 1;
