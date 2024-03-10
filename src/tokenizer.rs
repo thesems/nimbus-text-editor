@@ -4,6 +4,7 @@ pub enum TokenType {
     Symbol,
     Constant,
     Identifier,
+    Comment,
 }
 
 pub trait Tokenizer<'a> {
@@ -46,12 +47,29 @@ impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
     }
 
     fn next(&mut self) -> Option<TokenType> {
-        let mut token_type = None;
         self.token = "";
+        let mut token_type = None;
         let mut string_constant = false;
+        let mut comment = false;
 
         for (i, ch) in self.text.chars().skip(self.counter).enumerate() {
             let comp = &self.text[self.counter..self.counter + i + 1];
+
+            if comment {
+                if ch == '\n' {
+                    token_type = Some(TokenType::Comment);
+                    self.token = comp;
+                    self.counter += i + 1;
+                    break;
+                }
+                continue;
+            }
+
+            let next_ch = self.text.chars().nth(self.counter + i + 1);
+            if ch == '/' && next_ch.is_some() && next_ch.unwrap() == '/' {
+                comment = true;
+                continue;
+            }
 
             if string_constant {
                 if ch == '"' {
@@ -67,8 +85,11 @@ impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
                 continue;
             }
 
-            let next_ch = self.text.chars().nth(self.counter + i + 1).unwrap();
-            let keyword_end = !next_ch.is_alphanumeric() && next_ch != '_';
+            let mut keyword_end = false;
+            let next_ch = self.text.chars().nth(self.counter + i + 1);
+            if next_ch.is_some() {
+                keyword_end = !next_ch.unwrap().is_alphanumeric() && next_ch.unwrap() != '_';
+            }
 
             if self.keywords.contains(&comp.trim().to_string()) && keyword_end {
                 token_type = Some(TokenType::Keyword);
@@ -96,13 +117,13 @@ impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
                 break;
             }
 
-            if next_ch == ' ' || self.symbols.contains(&next_ch) {
-                self.token = comp;
-                self.counter += i + 1;
-                token_type = Some(TokenType::Identifier);
-                // if self.token.chars().next().unwrap().is_uppercase() {
-                // }
-                break;
+            if let Some(next_ch) = next_ch {
+                if next_ch == ' ' || self.symbols.contains(&next_ch) {
+                    self.token = comp;
+                    self.counter += i + 1;
+                    token_type = Some(TokenType::Identifier);
+                    break;
+                }
             }
         }
 
@@ -134,7 +155,7 @@ mod tests {
         assert_eq!(tokenizer.next().unwrap(), TokenType::Keyword);
         assert_eq!(tokenizer.token(), "use");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
-        assert_eq!(tokenizer.token(), "nimbus_text_editor");
+        assert_eq!(tokenizer.token().trim(), "nimbus_text_editor");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ":");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
@@ -152,7 +173,7 @@ mod tests {
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ",");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
-        assert_eq!(tokenizer.token(), "editor");
+        assert_eq!(tokenizer.token().trim(), "editor");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ":");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
@@ -166,17 +187,17 @@ mod tests {
         assert_eq!(tokenizer.next().unwrap(), TokenType::Keyword);
         assert_eq!(tokenizer.token(), "fn");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
-        assert_eq!(tokenizer.token(), "main");
+        assert_eq!(tokenizer.token().trim(), "main");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), "(");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ")");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
-        assert_eq!(tokenizer.token(), "-");
+        assert_eq!(tokenizer.token().trim(), "-");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ">");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
-        assert_eq!(tokenizer.token(), "Result");
+        assert_eq!(tokenizer.token().trim(), "Result");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), "<");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
@@ -186,19 +207,19 @@ mod tests {
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ",");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
-        assert_eq!(tokenizer.token(), "Error");
+        assert_eq!(tokenizer.token().trim(), "Error");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ">");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
-        assert_eq!(tokenizer.token(), "{");
+        assert_eq!(tokenizer.token().trim(), "{");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Keyword);
-        assert_eq!(tokenizer.token(), "let");
+        assert_eq!(tokenizer.token().trim(), "let");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
-        assert_eq!(tokenizer.token(), "args");
+        assert_eq!(tokenizer.token().trim(), "args");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ":");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
-        assert_eq!(tokenizer.token(), "Vec");
+        assert_eq!(tokenizer.token().trim(), "Vec");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), "<");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
@@ -206,9 +227,9 @@ mod tests {
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ">");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
-        assert_eq!(tokenizer.token(), "=");
+        assert_eq!(tokenizer.token().trim(), "=");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
-        assert_eq!(tokenizer.token(), "env");
+        assert_eq!(tokenizer.token().trim(), "env");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ":");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
@@ -240,7 +261,7 @@ mod tests {
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ";");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);
-        assert_eq!(tokenizer.token(), "Ok");
+        assert_eq!(tokenizer.token().trim(), "Ok");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), "(");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
@@ -250,7 +271,7 @@ mod tests {
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
         assert_eq!(tokenizer.token(), ")");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Symbol);
-        assert_eq!(tokenizer.token(), "}");
+        assert_eq!(tokenizer.token().trim(), "}");
         assert_eq!(tokenizer.next(), None);
         assert_eq!(tokenizer.token(), "");
     }
