@@ -83,14 +83,16 @@ impl Buffer {
         if let Some(from_offset) = self.piece_table.get_offset_from_position(from) {
             if let Some(until_pos) = until {
                 if let Some(until_offset) = self.piece_table.get_offset_from_position(until_pos) {
-                    return self
-                        .piece_table
-                        .get(from_offset, Some(until_offset));
+                    return self.piece_table.get(from_offset, Some(until_offset));
                 }
             }
             return self.piece_table.get(from_offset, None);
         }
         self.piece_table.get(0, None)
+    }
+
+    pub fn find(&self, text: &str, offset: usize) -> Vec<std::ops::Range<usize>> {
+        self.piece_table.find(text, offset)
     }
 
     pub fn insert_new_line(&mut self, position: &Position) {
@@ -192,6 +194,15 @@ mod tests {
             buffer.get(&Position::new(0, 1), Some(&Position::new(0, 2))),
             "The hero lied.\r\n"
         );
+    }
+
+    #[test]
+    fn test_buffer_search() {
+        let buffer =
+            Buffer::from_string(String::from("File is read.\r\nThe hero lied.\r\nThe end."));
+        
+        let occurences = buffer.find("hero", 0);
+        assert_eq!(occurences[0], 19..23)
     }
 
     #[test]

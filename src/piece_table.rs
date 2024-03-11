@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use crate::piece::{Piece, Source};
 use crate::position::Position;
 
@@ -261,6 +263,34 @@ impl PieceTable {
             counted_len += piece.length;
         }
         data
+    }
+
+    pub fn find(&self, text: &str, offset: usize) -> Vec<Range<usize>> {
+        let mut found = vec![];
+
+        let mut counted_start = 0;
+        for piece in self.pieces.iter() {
+            let mut range = piece.offset..piece.offset + piece.length;
+
+            if counted_start + piece.length < offset {
+                counted_start += piece.length;
+                continue;
+            }
+            if counted_start < offset {
+                range.start = offset - counted_start;
+                counted_start += range.start;
+            }
+
+            let data = match piece.source {
+                Source::Data => &self.data[range],
+                Source::Add => &self.add[range],
+            };
+
+            if let Some(idx) = data.find(text) {
+                found.push(idx..idx+text.len());
+            }
+        }
+        found
     }
 }
 

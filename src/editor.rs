@@ -9,8 +9,12 @@ use std::{
     collections::HashMap,
     env,
     io::{stdin, Error, Stdin},
+    ops::Range,
 };
-use termion::{color::{self, Color}, event::Key};
+use termion::{
+    color::{self},
+    event::Key,
+};
 
 #[derive(PartialEq)]
 enum EditorMode {
@@ -34,6 +38,7 @@ pub struct Editor {
     highlighters: HashMap<FileExtension, Box<dyn Highlighter>>,
     extensions: HashMap<String, String>,
     file_extension: String,
+    search_occurences: Vec<Range<usize>>,
 }
 
 impl Editor {
@@ -69,6 +74,7 @@ impl Editor {
             highlighters,
             extensions,
             file_extension,
+            search_occurences: vec![],
         })
     }
 
@@ -135,6 +141,11 @@ impl Editor {
                         }
                         EditorMode::Command => {
                             self.command.push(c);
+
+                            if self.command.starts_with('/') {
+                                self.search_occurences =
+                                    self.buffer.find(&self.command.as_str()[1..], 0);
+                            }
                         }
                         _ => self.handle_key_normal_mode(c),
                     }
@@ -146,6 +157,7 @@ impl Editor {
             Key::Esc => {
                 if self.mode == EditorMode::Insert || self.mode == EditorMode::Command {
                     self.mode = EditorMode::Normal;
+                    self.search_occurences.clear();
                     self.command.clear();
                 }
             }
@@ -160,6 +172,12 @@ impl Editor {
             Key::Backspace => {
                 if self.mode == EditorMode::Command && !self.command.is_empty() {
                     self.command.pop();
+
+                    if !self.command.is_empty() {
+                        self.search_occurences = self.buffer.find(&self.command.as_str()[1..], 0);
+                    } else {
+                        self.mode = EditorMode::Normal;
+                    }
                     return;
                 }
 
@@ -285,6 +303,10 @@ impl Editor {
             'l' => self.move_right(),
             '0' => self.move_to_sol(),
             '$' => self.move_to_eol(),
+            '/' => {
+                self.mode = EditorMode::Command;
+                self.command.push('/');
+            }
             _ => {}
         }
     }
@@ -433,6 +455,17 @@ impl Editor {
             self.terminal.write_with_color(help, &color::White);
         } else if let Some(highlighter) = self.highlighters.get(&FileExtension::Rust) {
             highlighter.highlight(buffer, &self.terminal);
+        } else if let Some(range) = self.search_occurences.first() {
+            let parts = [
+                &buffer[..range.start],
+                &buffer[range.start..range.end],
+                &buffer[range.end..],
+            ];
+
+            self.terminal.write(parts[0]);
+            self.terminal
+                .write_with_color_bg(parts[1], &color::Black, &color::LightYellow);
+            self.terminal.write(parts[2]);
         } else {
             self.terminal.write(buffer);
         }
@@ -465,7 +498,8 @@ impl Editor {
             x: 0,
             y: self.terminal.size().1 as usize - 2,
         });
-        self.terminal.write_with_color_bg(&self.status, &color::Black, &color::Magenta);
+        self.terminal
+            .write_with_color_bg(&self.status, &color::Black, &color::Magenta);
     }
 
     fn draw_debug(&mut self) {
@@ -474,9 +508,11 @@ impl Editor {
         }
 
         // Debug bar
-        let debug = self
-            .buffer
-            .get_debug_status(&self.adjusted_cursor_position());
+        // let debug = self
+        //     .buffer
+        //     .get_debug_status(&self.adjusted_cursor_position());
+        let debug = format!("Search: {:?}", self.search_occurences);
+
         self.terminal.goto(&Position {
             x: 0,
             y: self.terminal.size().1 as usize - 4,
