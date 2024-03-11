@@ -1,7 +1,6 @@
 use crate::piece::{Piece, Source};
 use crate::position::Position;
 
-
 #[derive(Default)]
 pub struct PieceTable {
     pub data: String,
@@ -225,15 +224,41 @@ impl PieceTable {
             .splice(initial_piece_idx..final_piece_idx + 1, new_pieces);
     }
 
-    pub fn get(&self) -> String {
+    /// Get the visible contents of the buffer. Specify an starting offset
+    /// and optionally the length of the contents. If None is passed,
+    /// it obtains everything until the end.
+    ///
+    /// Runtime: O(n), where n = # of pieces
+    ///
+    pub fn get(&self, offset: usize, until_offset: Option<usize>) -> String {
+        let until = until_offset.unwrap_or(0);
         let mut data = String::new();
 
+        let mut counted_start = 0;
+        let mut counted_len = 0;
+
         for piece in self.pieces.iter() {
-            if piece.source == Source::Data {
-                data.push_str(&self.data[piece.offset..piece.offset + piece.length]);
-            } else {
-                data.push_str(&self.add[piece.offset..piece.offset + piece.length]);
+            let mut range = piece.offset..piece.offset + piece.length;
+
+            if counted_start + piece.length < offset {
+                counted_start += piece.length;
+                continue;
             }
+            if counted_start < offset {
+                range.start = offset - counted_start;
+                counted_start += range.start;
+            }
+
+            if until_offset.is_some() && counted_len + piece.length > until {
+                range.end = piece.offset + std::cmp::min(piece.length, until - counted_len);
+            }
+
+            if piece.source == Source::Data {
+                data.push_str(&self.data[range]);
+            } else {
+                data.push_str(&self.add[range]);
+            }
+            counted_len += piece.length;
         }
         data
     }
@@ -246,7 +271,14 @@ mod tests {
     #[test]
     fn test_buffer_init() {
         let buffer = PieceTable::from_string(String::from("This is already in the file."));
-        assert_eq!(buffer.get(), "This is already in the file.")
+        assert_eq!(buffer.get(0, None), "This is already in the file.")
+    }
+
+    #[test]
+    fn test_buffer_get() {
+        let buffer =
+            PieceTable::from_string(String::from("File is read.\r\nThe hero lied.\r\nThe end."));
+        assert_eq!(buffer.get(15, Some(29)), "The hero lied.")
     }
 
     #[test]
@@ -255,7 +287,10 @@ mod tests {
         let buffer = PieceTable::from_string(file);
 
         assert_eq!(buffer.data, "File is read.\r\nThe hero lied.\r\nThe end.");
-        assert_eq!(buffer.get(), "File is read.\r\nThe hero lied.\r\nThe end.");
+        assert_eq!(
+            buffer.get(0, None),
+            "File is read.\r\nThe hero lied.\r\nThe end."
+        );
 
         assert_eq!(
             buffer.get_offset_from_position(&Position::new(3, 0)),
@@ -300,7 +335,7 @@ mod tests {
         buffer.insert_new_line(5);
 
         assert_eq!(
-            buffer.get(),
+            buffer.get(0, None),
             "File \r\nis read.\r\nThe hero has lied.The end."
         );
         assert_eq!(buffer.find_piece_from_offset(4).unwrap().0, 0);
@@ -318,7 +353,10 @@ mod tests {
         let mut buffer = PieceTable::from_string(file);
         buffer.delete(13, 2);
 
-        assert_eq!(buffer.get(), "File is read.The hero lied.\r\nThe end.");
+        assert_eq!(
+            buffer.get(0, None),
+            "File is read.The hero lied.\r\nThe end."
+        );
         assert_eq!(
             buffer.get_offset_from_position(&Position::new(0, 1)),
             Some(29)
@@ -333,7 +371,7 @@ mod tests {
 
         buffer.insert("New text appended.", file_len);
         assert_eq!(
-            buffer.get(),
+            buffer.get(0, None),
             "This is already in the file.New text appended."
         );
     }
@@ -343,7 +381,7 @@ mod tests {
         let file = String::from("File is read.");
         let mut buffer = PieceTable::from_string(file);
         buffer.insert("not ", 8);
-        assert_eq!(buffer.get(), "File is not read.");
+        assert_eq!(buffer.get(0, None), "File is not read.");
     }
 
     #[test]
@@ -357,20 +395,26 @@ mod tests {
         );
 
         buffer.insert_new_line(5);
-        assert_eq!(buffer.get(), "File \r\nis read.\r\nThe hero lied.\r\n");
+        assert_eq!(
+            buffer.get(0, None),
+            "File \r\nis read.\r\nThe hero lied.\r\n"
+        );
         assert_eq!(
             buffer.get_offset_from_position(&Position { x: 4, y: 1 }),
             Some(11)
         );
 
         buffer.insert("\r\n", 10);
-        assert_eq!(buffer.get(), "File \r\nis \r\nread.\r\nThe hero lied.\r\n");
+        assert_eq!(
+            buffer.get(0, None),
+            "File \r\nis \r\nread.\r\nThe hero lied.\r\n"
+        );
 
         buffer.insert("\r\n", 5);
         buffer.insert("\r\n", 5);
         buffer.insert("\r\n", 5);
         assert_eq!(
-            buffer.get(),
+            buffer.get(0, None),
             "File \r\n\r\n\r\n\r\nis \r\nread.\r\nThe hero lied.\r\n"
         );
     }
@@ -380,11 +424,11 @@ mod tests {
         let file = String::from("File is read.\r\nThe hero lied.");
         let mut buffer = PieceTable::from_string(file);
         buffer.insert("has ", 24);
-        assert_eq!(buffer.get(), "File is read.\r\nThe hero has lied.");
+        assert_eq!(buffer.get(0, None), "File is read.\r\nThe hero has lied.");
         buffer.insert_new_line(33);
         buffer.insert("The end.", 35);
         assert_eq!(
-            buffer.get(),
+            buffer.get(0, None),
             "File is read.\r\nThe hero has lied.\r\nThe end."
         );
     }
@@ -395,7 +439,7 @@ mod tests {
         let mut buffer = PieceTable::from_string(file);
         buffer.insert("Third line.\r\n", 31);
         assert_eq!(
-            buffer.get(),
+            buffer.get(0, None),
             "File is read.\r\nThe hero lied.\r\nThird line.\r\n"
         );
     }
@@ -408,7 +452,7 @@ mod tests {
         buffer.insert("a", 25);
         buffer.insert("s", 26);
         buffer.insert(" ", 27);
-        assert_eq!(buffer.get(), "File is read.\r\nThe hero has lied.");
+        assert_eq!(buffer.get(0, None), "File is read.\r\nThe hero has lied.");
     }
 
     #[test]
@@ -417,10 +461,10 @@ mod tests {
         let mut buffer = PieceTable::from_string(file);
 
         buffer.delete(3, 1);
-        assert_eq!(buffer.get(), "Fil is read.\r\nThe hero lied.\r\n");
+        assert_eq!(buffer.get(0, None), "Fil is read.\r\nThe hero lied.\r\n");
 
         buffer.delete(14, 16);
-        assert_eq!(buffer.get(), "Fil is read.\r\n");
+        assert_eq!(buffer.get(0, None), "Fil is read.\r\n");
     }
 
     #[test]
@@ -431,7 +475,7 @@ mod tests {
         buffer.delete(7, 8);
         buffer.insert_new_line(7);
         buffer.insert(".", 7);
-        assert_eq!(buffer.get(), "File is.\r\nThe hero lied.\r\n");
+        assert_eq!(buffer.get(0, None), "File is.\r\nThe hero lied.\r\n");
     }
 
     #[test]
@@ -450,7 +494,7 @@ mod tests {
 
         buffer.delete(57, 5);
         assert_eq!(
-            buffer.get(),
+            buffer.get(0, None),
             "File is read.\r\nThe hero lied.\r\nThe end.\r\nBensu.\r\nHello.\r\n".to_string()
         );
     }

@@ -55,7 +55,7 @@ impl Buffer {
 
     pub fn save_file(&self) -> std::io::Result<&str> {
         if let Some(path) = self.file_path.as_ref() {
-            fs::write(path, self.piece_table.get())?;
+            fs::write(path, self.piece_table.get(0, None))?;
             Ok(path.as_str())
         } else {
             Err(io::Error::new(
@@ -65,10 +65,20 @@ impl Buffer {
         }
     }
 
-    pub fn get(&self) -> String {
-        self.piece_table.get()
+    pub fn get(&self, from: &Position, until: Option<&Position>) -> String {
+        if let Some(from_offset) = self.piece_table.get_offset_from_position(from) {
+            if let Some(until_pos) = until {
+                if let Some(until_offset) = self.piece_table.get_offset_from_position(until_pos) {
+                    return self
+                        .piece_table
+                        .get(from_offset, Some(until_offset));
+                }
+            }
+            return self.piece_table.get(from_offset, None);
+        }
+        self.piece_table.get(0, None)
     }
-    
+
     pub fn insert_new_line(&mut self, position: &Position) {
         if let Some(offset) = self.piece_table.get_offset_from_position(position) {
             self.piece_table.insert_new_line(offset);
@@ -95,8 +105,12 @@ impl Buffer {
 
     /// Check if the buffer contains the column for the line. Use 0-based alignment.
     pub fn get_line_length(&self, y: usize) -> usize {
-        let y_line_start_res = self.piece_table.get_offset_from_position(&Position { x: 0, y });
-        let next_y_line_start_res = self.piece_table.get_offset_from_position(&Position { x: 0, y: y + 1 });
+        let y_line_start_res = self
+            .piece_table
+            .get_offset_from_position(&Position { x: 0, y });
+        let next_y_line_start_res = self
+            .piece_table
+            .get_offset_from_position(&Position { x: 0, y: y + 1 });
 
         if let Some(y_line_start) = y_line_start_res {
             if let Some(next_y_line_start) = next_y_line_start_res {
@@ -107,7 +121,7 @@ impl Buffer {
             // TODO: avoid getting full sequence
             // idea: count via piece in reverse
             let content_len = self
-                .get()
+                .get(&Position::new(0, 0), None)
                 .chars()
                 .skip(y_line_start)
                 .filter(|x| *x != '\n' && *x != '\r')
@@ -134,7 +148,7 @@ impl Buffer {
             self.piece_table.line_starts_add,
             debug_offset,
             self.piece_table.pieces,
-            self.piece_table.get(),
+            self.piece_table.get(0, None),
         )
     }
 }
@@ -146,7 +160,24 @@ mod tests {
     #[test]
     fn test_buffer_init() {
         let buffer = Buffer::from_string(String::from("This is already in the file."));
-        assert_eq!(buffer.piece_table.get(), "This is already in the file.")
+        assert_eq!(
+            buffer.piece_table.get(0, None),
+            "This is already in the file."
+        )
+    }
+
+    #[test]
+    fn test_buffer_get() {
+        let buffer =
+            Buffer::from_string(String::from("File is read.\r\nThe hero lied.\r\nThe end."));
+        assert_eq!(
+            buffer.get(&Position::new(0, 1), None),
+            "The hero lied.\r\nThe end."
+        );
+        assert_eq!(
+            buffer.get(&Position::new(0, 1), Some(&Position::new(0, 2))),
+            "The hero lied.\r\n"
+        );
     }
 
     #[test]

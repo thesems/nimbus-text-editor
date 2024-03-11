@@ -21,6 +21,7 @@ enum EditorMode {
 
 pub struct Editor {
     terminal: Terminal,
+    offset_y: usize,
     cursor_position: Position,
     current_line_length: usize,
     status: String,
@@ -42,6 +43,7 @@ impl Editor {
         );
         Ok(Editor {
             terminal: Terminal::new()?,
+            offset_y: 0,
             cursor_position: Position::default(),
             current_line_length: buffer.get_line_length(0),
             status: String::new(),
@@ -49,7 +51,7 @@ impl Editor {
             mode: EditorMode::Normal,
             running: true,
             untouched: buffer.file_path().is_none(),
-            debug_bar: true,
+            debug_bar: false,
             buffer,
             highlighters,
         })
@@ -76,7 +78,7 @@ impl Editor {
             self.draw_buffer();
             self.draw_status_bar();
             self.draw_command();
-            // self.draw_debug();
+            self.draw_debug();
 
             // Position cursor
             self.terminal.goto(&self.adjusted_cursor_position());
@@ -261,14 +263,20 @@ impl Editor {
     }
 
     fn move_up(&mut self) {
-        if self.cursor_position.y > 0 {
+        if self.cursor_position.y == 0 && self.offset_y > 0 {
+            self.offset_y -= 1;
+        }
+        else if self.cursor_position.y > 0 {
             self.cursor_position.y -= 1;
         }
         self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
     }
 
     fn move_down(&mut self) {
-        if self.is_valid_line(self.cursor_position.y + 1) {
+        let is_valid_line = self.is_valid_line(self.cursor_position.y + 1);
+        if is_valid_line && self.cursor_position.y == self.terminal.size().1 as usize - 3 {
+            self.offset_y += 1;
+        } else if is_valid_line {
             self.cursor_position.y += 1;
         }
         self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
@@ -337,6 +345,14 @@ impl Editor {
     fn draw_buffer(&mut self) {
         self.terminal.goto(&Position::default());
 
+        let buffer = &self.buffer.get(
+            &Position::new(0, self.offset_y),
+            Some(&Position::new(
+                0,
+                self.offset_y + self.terminal.size().1 as usize - 2,
+            )),
+        );
+
         if self.untouched {
             let text = "Nimbus Text Editor";
             let version = "Version 0.1.0";
@@ -361,9 +377,9 @@ impl Editor {
             self.terminal.goto(&pos);
             self.terminal.write_with_color(help, &color::White);
         } else if let Some(highlighter) = self.highlighters.get(&FileExtension::Rust) {
-            highlighter.highlight(&self.buffer.get(), &self.terminal);
+            highlighter.highlight(buffer, &self.terminal);
         } else {
-            self.terminal.write(&self.buffer.get());
+            self.terminal.write(buffer);
         }
     }
 
@@ -471,7 +487,7 @@ mod tests {
 
         editor.buffer.delete(&Position::new(14, 1), 2); // 29
         assert_eq!(
-            editor.buffer.get(),
+            editor.buffer.get(&Position::new(0, 0), None),
             "File is read.\r\nThe hero lied.The end.\r\n"
         );
 

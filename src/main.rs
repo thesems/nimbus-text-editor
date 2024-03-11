@@ -4,8 +4,6 @@ use std::{env, io::Error, process};
 fn main() -> Result<(), Error> {
     let args: Vec<String> = env::args().skip(1).collect();
 
-    let mut x: u64 = 0;
-
     let file_name = match args.len() {
         0 => None,
         1 => Some(args[0].as_str()),
@@ -15,8 +13,6 @@ fn main() -> Result<(), Error> {
             process::exit(1);
         }
     };
-
-    // let file_name = Some("test.txt");
 
     let buffer = match file_name {
         Some(path) => Buffer::from_file(path)?,
