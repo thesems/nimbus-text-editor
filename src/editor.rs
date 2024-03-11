@@ -32,15 +32,28 @@ pub struct Editor {
     debug_bar: bool,
     buffer: Buffer,
     highlighters: HashMap<FileExtension, Box<dyn Highlighter>>,
+    extensions: HashMap<String, String>,
+    file_extension: String,
 }
 
 impl Editor {
     pub fn new(buffer: Buffer) -> Result<Editor, Error> {
+        let mut extensions = HashMap::new();
+        extensions.insert("rs".to_string(), "rust".to_string());
+        extensions.insert("toml".to_string(), "toml".to_string());
+        extensions.insert("txt".to_string(), "text".to_string());
+        extensions.insert("".to_string(), "unknown".to_string());
+
+        let file_extension = buffer.file_extension().unwrap_or("").to_string();
+
         let mut highlighters = HashMap::new();
-        highlighters.insert(
-            FileExtension::Rust,
-            Box::<RustHighlighter>::default() as Box<dyn Highlighter>,
-        );
+        if let "rs" = file_extension.as_str() {
+            highlighters.insert(
+                FileExtension::Rust,
+                Box::<RustHighlighter>::default() as Box<dyn Highlighter>,
+            );
+        }
+
         Ok(Editor {
             terminal: Terminal::new()?,
             offset_y: 0,
@@ -54,6 +67,8 @@ impl Editor {
             debug_bar: false,
             buffer,
             highlighters,
+            extensions,
+            file_extension,
         })
     }
 
@@ -174,7 +189,9 @@ impl Editor {
                     if self.cursor_position.x > 0 {
                         self.cursor_position.x -= 1;
                     } else if self.cursor_position.y > 0 {
-                        let line_len = self.buffer.get_line_length(self.offset_y + self.cursor_position.y - 1);
+                        let line_len = self
+                            .buffer
+                            .get_line_length(self.offset_y + self.cursor_position.y - 1);
                         self.cursor_position.x = line_len;
                         self.cursor_position.y -= 1;
                         self.current_line_length = line_len;
@@ -278,7 +295,9 @@ impl Editor {
         } else if self.cursor_position.y > 0 {
             self.cursor_position.y -= 1;
         }
-        self.current_line_length = self.buffer.get_line_length(self.offset_y + self.cursor_position.y);
+        self.current_line_length = self
+            .buffer
+            .get_line_length(self.offset_y + self.cursor_position.y);
     }
 
     fn move_down(&mut self) {
@@ -288,7 +307,9 @@ impl Editor {
         } else if is_valid_line {
             self.cursor_position.y += 1;
         }
-        self.current_line_length = self.buffer.get_line_length(self.offset_y + self.cursor_position.y);
+        self.current_line_length = self
+            .buffer
+            .get_line_length(self.offset_y + self.cursor_position.y);
     }
 
     fn move_right(&mut self) {
@@ -431,8 +452,11 @@ impl Editor {
         }
 
         self.status = format!(
-            "{}:{} | {}",
-            self.cursor_position.y, self.cursor_position.x, self.current_line_length
+            "{}:{} | {} | {}",
+            self.cursor_position.y,
+            self.cursor_position.x,
+            self.current_line_length,
+            self.get_extension_name(&self.file_extension)
         );
         self.terminal.goto(&Position {
             x: 0,
@@ -465,6 +489,13 @@ impl Editor {
     fn toggle_debug_bar(&mut self) {
         self.debug_bar = !self.debug_bar;
         self.command.clear();
+    }
+
+    fn get_extension_name(&self, extension: &str) -> &str {
+        if let Some(name) = self.extensions.get(extension) {
+            return name;
+        }
+        self.get_extension_name("")
     }
 }
 
@@ -519,7 +550,7 @@ mod tests {
             Buffer::from_string("File is read.\r\nThe hero lied.\r\nThe end.\r\n".to_string());
         let mut editor = Editor::new(buffer).unwrap();
 
-        editor.buffer.delete(&Position::new(14, 1), 2); // 29
+        editor.buffer.delete(&Position::new(14, 1), 2);
         assert_eq!(
             editor.buffer.get(&Position::new(0, 0), None),
             "File is read.\r\nThe hero lied.The end.\r\n"

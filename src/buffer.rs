@@ -65,6 +65,20 @@ impl Buffer {
         }
     }
 
+    pub fn file_name(&self) -> Option<&str> {
+        if let Some(file_path) = &self.file_path {
+            return Some(file_path.split('/').last().unwrap());
+        }
+        None
+    }
+
+    pub fn file_extension(&self) -> Option<&str> {
+        if let Some(file_name) = &self.file_name() {
+            return Some(file_name.split('.').last().unwrap());
+        }
+        None
+    }
+
     pub fn get(&self, from: &Position, until: Option<&Position>) -> String {
         if let Some(from_offset) = self.piece_table.get_offset_from_position(from) {
             if let Some(until_pos) = until {
