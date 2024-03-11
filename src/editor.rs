@@ -266,6 +266,8 @@ impl Editor {
             'j' => self.move_down(),
             'h' => self.move_left(),
             'l' => self.move_right(),
+            '0' => self.move_to_sol(),
+            '$' => self.move_to_eol(),
             _ => {}
         }
     }
