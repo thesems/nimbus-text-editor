@@ -55,6 +55,22 @@ impl Terminal {
         print!("{}{}{}", color::Fg(color), buffer, color::Fg(color::Reset));
     }
 
+    pub fn write_with_color_bg(
+        &self,
+        buffer: &str,
+        color: &dyn color::Color,
+        bg_color: &dyn color::Color,
+    ) {
+        print!(
+            "{}{}{}{}{}",
+            color::Bg(bg_color),
+            color::Fg(color),
+            buffer,
+            color::Fg(color::Reset),
+            color::Bg(color::Reset)
+        );
+    }
+
     pub fn show_cursor(&self) {
         print!("{}", termion::cursor::Show);
     }

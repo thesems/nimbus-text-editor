@@ -10,7 +10,7 @@ use std::{
     env,
     io::{stdin, Error, Stdin},
 };
-use termion::{color, event::Key};
+use termion::{color::{self, Color}, event::Key};
 
 #[derive(PartialEq)]
 enum EditorMode {
@@ -451,18 +451,21 @@ impl Editor {
             return;
         }
 
-        self.status = format!(
-            "{}:{} | {} | {}",
+        let left_side = self.buffer.file_name().unwrap_or("unsaved").to_string();
+        let right_side = format!(
+            "{} | {}:{}",
+            self.get_extension_name(&self.file_extension),
             self.cursor_position.y,
             self.cursor_position.x,
-            self.current_line_length,
-            self.get_extension_name(&self.file_extension)
         );
+        let pad_left = self.terminal.size().0 as usize - left_side.len() - 2;
+        self.status = format!(" {}{:>width$} ", left_side, right_side, width = pad_left);
+
         self.terminal.goto(&Position {
             x: 0,
             y: self.terminal.size().1 as usize - 2,
         });
-        self.terminal.write(&self.status);
+        self.terminal.write_with_color_bg(&self.status, &color::Black, &color::Magenta);
     }
 
     fn draw_debug(&mut self) {
