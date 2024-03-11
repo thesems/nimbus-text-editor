@@ -124,7 +124,9 @@ impl Editor {
                         _ => self.handle_key_normal_mode(c),
                     }
                 }
-                self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
+                self.current_line_length = self
+                    .buffer
+                    .get_line_length(self.offset_y + self.cursor_position.y);
             }
             Key::Esc => {
                 if self.mode == EditorMode::Insert || self.mode == EditorMode::Command {
@@ -153,7 +155,9 @@ impl Editor {
                         self.cursor_position.x -= 1;
                         self.buffer.delete(&self.cursor_position, 1);
                     } else if self.cursor_position.y > 0 {
-                        let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
+                        let line_len = self
+                            .buffer
+                            .get_line_length(self.offset_y + self.cursor_position.y - 1);
                         self.cursor_position.x = line_len;
                         self.cursor_position.y -= 1;
                         self.buffer.delete(&self.cursor_position, 2);
@@ -163,12 +167,14 @@ impl Editor {
                         return;
                     }
 
-                    self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
+                    self.current_line_length = self
+                        .buffer
+                        .get_line_length(self.offset_y + self.cursor_position.y);
                 } else if self.mode == EditorMode::Normal {
                     if self.cursor_position.x > 0 {
                         self.cursor_position.x -= 1;
                     } else if self.cursor_position.y > 0 {
-                        let line_len = self.buffer.get_line_length(self.cursor_position.y - 1);
+                        let line_len = self.buffer.get_line_length(self.offset_y + self.cursor_position.y - 1);
                         self.cursor_position.x = line_len;
                         self.cursor_position.y -= 1;
                         self.current_line_length = line_len;
@@ -195,6 +201,8 @@ impl Editor {
             Key::Down => self.move_down(),
             Key::Home => self.move_to_sol(),
             Key::End => self.move_to_eol(),
+            Key::PageUp => self.move_page_up(),
+            Key::PageDown => self.move_page_down(),
             _ => {
                 dbg!(&key);
             }
@@ -265,11 +273,10 @@ impl Editor {
     fn move_up(&mut self) {
         if self.cursor_position.y == 0 && self.offset_y > 0 {
             self.offset_y -= 1;
-        }
-        else if self.cursor_position.y > 0 {
+        } else if self.cursor_position.y > 0 {
             self.cursor_position.y -= 1;
         }
-        self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
+        self.current_line_length = self.buffer.get_line_length(self.offset_y + self.cursor_position.y);
     }
 
     fn move_down(&mut self) {
@@ -279,7 +286,7 @@ impl Editor {
         } else if is_valid_line {
             self.cursor_position.y += 1;
         }
-        self.current_line_length = self.buffer.get_line_length(self.cursor_position.y);
+        self.current_line_length = self.buffer.get_line_length(self.offset_y + self.cursor_position.y);
     }
 
     fn move_right(&mut self) {
@@ -298,6 +305,31 @@ impl Editor {
         if self.cursor_position.x > 0 {
             self.cursor_position.x -= 1;
         }
+    }
+
+    fn move_page_up(&mut self) {
+        let height = self.terminal.size().1 - 3;
+        if self.offset_y > height as usize {
+            self.offset_y -= height as usize;
+        } else {
+            self.offset_y = 0;
+        }
+
+        self.current_line_length = self
+            .buffer
+            .get_line_length(self.offset_y + self.cursor_position.y);
+    }
+
+    fn move_page_down(&mut self) {
+        let total_lines = self.buffer.get_total_lines();
+        let height = self.terminal.size().1 - 3;
+        if (self.offset_y + height as usize) < total_lines {
+            self.offset_y += height as usize;
+        }
+
+        self.current_line_length = self
+            .buffer
+            .get_line_length(self.offset_y + self.cursor_position.y);
     }
 
     /// Moves the cursor to start of line.
