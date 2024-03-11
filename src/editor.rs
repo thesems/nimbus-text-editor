@@ -451,7 +451,7 @@ impl Editor {
             return;
         }
 
-        let left_side = self.buffer.file_name().unwrap_or("unsaved").to_string();
+        let left_side = self.buffer.file_path().unwrap_or("unsaved").to_string();
         let right_side = format!(
             "{} | {}:{}",
             self.get_extension_name(&self.file_extension),
