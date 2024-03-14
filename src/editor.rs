@@ -121,7 +121,10 @@ impl Editor {
                         EditorMode::Normal => self.move_down(),
                         EditorMode::Insert => {
                             self.reset_cursor();
-                            self.buffer.insert_new_line(&self.cursor_position);
+                            self.buffer.insert_new_line(&Position::new(
+                                self.cursor_position.x,
+                                self.offset_y + self.cursor_position.y,
+                            ));
                             self.cursor_position.x = 0;
                             self.cursor_position.y += 1;
                         }
@@ -135,8 +138,13 @@ impl Editor {
                     match self.mode {
                         EditorMode::Insert => {
                             self.reset_cursor();
-                            self.buffer
-                                .insert(c.to_string().as_str(), &self.cursor_position);
+                            self.buffer.insert(
+                                c.to_string().as_str(),
+                                &Position::new(
+                                    self.cursor_position.x,
+                                    self.cursor_position.y + self.offset_y,
+                                ),
+                            );
                             self.cursor_position.x += 1;
                         }
                         EditorMode::Command => {
@@ -186,14 +194,26 @@ impl Editor {
                 if self.mode == EditorMode::Insert {
                     if self.cursor_position.x > 0 {
                         self.cursor_position.x -= 1;
-                        self.buffer.delete(&self.cursor_position, 1);
+                        self.buffer.delete(
+                            &Position::new(
+                                self.cursor_position.x,
+                                self.cursor_position.y + self.offset_y,
+                            ),
+                            1,
+                        );
                     } else if self.cursor_position.y > 0 {
                         let line_len = self
                             .buffer
                             .get_line_length(self.offset_y + self.cursor_position.y - 1);
                         self.cursor_position.x = line_len;
                         self.cursor_position.y -= 1;
-                        self.buffer.delete(&self.cursor_position, 2);
+                        self.buffer.delete(
+                            &Position::new(
+                                self.cursor_position.x,
+                                self.cursor_position.y + self.offset_y,
+                            ),
+                            2,
+                        );
                         self.current_line_length = line_len;
                     } else {
                         // empty
@@ -220,13 +240,25 @@ impl Editor {
                 if self.mode == EditorMode::Insert {
                     if self.cursor_position.x < self.current_line_length {
                         self.current_line_length -= 1;
-                        self.buffer.delete(&self.cursor_position, 1);
+                        self.buffer.delete(
+                            &Position::new(
+                                self.cursor_position.x,
+                                self.cursor_position.y + self.offset_y,
+                            ),
+                            1,
+                        );
                     } else if self.cursor_position.x == self.current_line_length
                         && self.cursor_position.x > 0
                     {
                         self.current_line_length -= 1;
                         self.cursor_position.x = self.current_line_length;
-                        self.buffer.delete(&self.cursor_position, 1);
+                        self.buffer.delete(
+                            &Position::new(
+                                self.cursor_position.x,
+                                self.cursor_position.y + self.offset_y,
+                            ),
+                            1,
+                        );
                     }
                 }
             }
@@ -323,7 +355,7 @@ impl Editor {
     }
 
     fn move_down(&mut self) {
-        let is_valid_line = self.is_valid_line(self.cursor_position.y + 1);
+        let is_valid_line = self.is_valid_line(self.offset_y + self.cursor_position.y + 1);
         if is_valid_line && self.cursor_position.y == self.terminal.size().1 as usize - 3 {
             self.offset_y += 1;
         } else if is_valid_line {
@@ -338,7 +370,7 @@ impl Editor {
         self.reset_cursor();
         let new_position = Position {
             x: self.cursor_position.x + 1,
-            y: self.cursor_position.y,
+            y: self.offset_y + self.cursor_position.y,
         };
         if self.is_valid_column(&new_position) {
             self.cursor_position.x += 1;
@@ -426,7 +458,7 @@ impl Editor {
             &Position::new(0, self.offset_y),
             Some(&Position::new(
                 0,
-                self.offset_y + self.terminal.size().1 as usize - 2,
+                self.offset_y + self.terminal.size().1 as usize - 3,
             )),
         );
 
