@@ -131,8 +131,7 @@ impl Editor {
                         EditorMode::Command => self.run_command().unwrap_or(()),
                     }
                 } else if c == ':' && self.mode == EditorMode::Normal {
-                    self.mode = EditorMode::Command;
-                    self.command.clear();
+                    self.change_mode(EditorMode::Command);
                     self.command.push(':');
                 } else {
                     match self.mode {
@@ -164,9 +163,7 @@ impl Editor {
             }
             Key::Esc => {
                 if self.mode == EditorMode::Insert || self.mode == EditorMode::Command {
-                    self.mode = EditorMode::Normal;
-                    self.search_occurences.clear();
-                    self.command.clear();
+                    self.change_mode(EditorMode::Normal);
                 }
             }
             Key::Ctrl(c) => {
@@ -184,7 +181,7 @@ impl Editor {
                     if !self.command.is_empty() {
                         self.search_occurences = self.buffer.find(&self.command.as_str()[1..], 0);
                     } else {
-                        self.mode = EditorMode::Normal;
+                        self.change_mode(EditorMode::Normal);
                     }
                     return;
                 }
@@ -318,29 +315,50 @@ impl Editor {
             self.command = format!("-- File saved to {}.", file_path);
         } else {
             self.command = "-- Create file:".to_string();
-            self.mode = EditorMode::Command;
+            self.change_mode(EditorMode::Command);
         }
         Ok(())
     }
 
     fn handle_key_normal_mode(&mut self, key: char) {
         match key {
-            'i' => {
-                self.mode = EditorMode::Insert;
-                self.command = "-- INSERT --".to_string();
-            }
+            'i' => self.change_mode(EditorMode::Insert),
             'k' => self.move_up(),
             'j' => self.move_down(),
             'h' => self.move_left(),
             'l' => self.move_right(),
             '0' => self.move_to_sol(),
             '$' => self.move_to_eol(),
+            'A' => {
+                self.move_to_eol();
+                self.change_mode(EditorMode::Insert);
+            }
             '/' => {
-                self.mode = EditorMode::Command;
                 self.command.push('/');
+                self.change_mode(EditorMode::Command);
             }
             _ => {}
         }
+    }
+
+    fn change_mode(&mut self, mode: EditorMode) {
+        match mode {
+            EditorMode::Insert => {
+                self.command = "-- INSERT --".to_string();
+            }
+            EditorMode::Normal => {
+                if self.mode == EditorMode::Command {
+                    self.command.clear();
+                    self.search_occurences.clear();
+                }
+            }
+            EditorMode::Command => {
+                if self.mode == EditorMode::Normal {
+                    self.command.clear();
+                }
+            }
+        }
+        self.mode = mode;
     }
 
     fn move_up(&mut self) {
