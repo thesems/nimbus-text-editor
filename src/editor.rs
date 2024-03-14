@@ -31,6 +31,7 @@ pub struct Editor {
     status: String,
     command: String,
     mode: EditorMode,
+    retain_command_text: bool,
     running: bool,
     untouched: bool,
     debug_bar: bool,
@@ -67,6 +68,7 @@ impl Editor {
             status: String::new(),
             command: String::new(),
             mode: EditorMode::Normal,
+            retain_command_text: false,
             running: true,
             untouched: buffer.file_path().is_none(),
             debug_bar: false,
@@ -295,10 +297,12 @@ impl Editor {
                 if pre_command.contains("-- Create file") {
                     let path = format!("{}/{}", env::current_dir()?.display(), tokens[1]);
                     self.buffer.set_file_path(path);
-                    self.command.clear();
+                    self.clear_command();
                     self.save_buffer()?;
                 } else {
                     self.command = "Command not found!".to_string();
+                    self.retain_command_text = true;
+                    self.change_mode(EditorMode::Normal);
                 }
             }
         }
@@ -334,10 +338,17 @@ impl Editor {
                 self.change_mode(EditorMode::Insert);
             }
             '/' => {
-                self.command.push('/');
                 self.change_mode(EditorMode::Command);
+                self.command.push('/');
             }
             _ => {}
+        }
+    }
+
+    fn clear_command(&mut self) {
+        if !self.retain_command_text {
+            self.command.clear();
+            self.retain_command_text = false;
         }
     }
 
@@ -348,14 +359,14 @@ impl Editor {
             }
             EditorMode::Normal => {
                 if self.mode == EditorMode::Command {
-                    self.command.clear();
+                    self.clear_command();
                     self.search_occurences.clear();
+                } else if self.mode == EditorMode::Insert {
+                    self.clear_command();
                 }
             }
             EditorMode::Command => {
-                if self.mode == EditorMode::Normal {
-                    self.command.clear();
-                }
+                self.clear_command();
             }
         }
         self.mode = mode;
@@ -577,7 +588,7 @@ impl Editor {
 
     fn toggle_debug_bar(&mut self) {
         self.debug_bar = !self.debug_bar;
-        self.command.clear();
+        self.clear_command();
     }
 
     fn get_extension_name(&self, extension: &str) -> &str {
