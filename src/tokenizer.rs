@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 #[derive(Debug, PartialEq)]
 pub enum TokenType {
     Keyword,
@@ -5,10 +7,11 @@ pub enum TokenType {
     Constant,
     Identifier,
     Comment,
+    Search,
 }
 
 pub trait Tokenizer<'a> {
-    fn new(text: &'a str) -> Self;
+    fn new(text: &'a str, search_occurences: Vec<Range<usize>>) -> Self;
     fn next(&mut self) -> Option<TokenType>;
     fn peek(&self) -> Option<TokenType>;
     fn token_type(&self) -> Option<&TokenType>;
@@ -22,9 +25,10 @@ pub struct RustTokenizer<'a> {
     counter: usize,
     keywords: Vec<String>,
     symbols: Vec<char>,
+    search_occurences: Vec<Range<usize>>,
 }
 impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
-    fn new(text: &'a str) -> Self {
+    fn new(text: &'a str, search_occurences: Vec<Range<usize>>) -> Self {
         Self {
             text,
             token: "",
@@ -43,6 +47,7 @@ impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
                 '!', '=', '%', '&', '*', '+', '!', '-', '.', ',', '>', '<', '/', ':', ';', '@',
                 '|', '?', '\"', '\'', '^', '$', '#', '{', '}', '[', ']', '(', ')',
             ],
+            search_occurences,
         }
     }
 
@@ -51,9 +56,16 @@ impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
         let mut token_type = None;
         let mut string_constant = false;
         let mut comment = false;
+        let mut is_search = false;
 
         for (i, ch) in self.text.chars().skip(self.counter).enumerate() {
             let comp = &self.text[self.counter..self.counter + i + 1];
+
+            for range in self.search_occurences.iter() {
+                if range.end >= self.counter && range.start <= (self.counter+i+1) {
+                    is_search = true;
+                }
+            }
 
             if comment {
                 if ch == '\n' {
@@ -127,6 +139,10 @@ impl<'a> Tokenizer<'a> for RustTokenizer<'a> {
             }
         }
 
+        if is_search {
+            token_type = Some(TokenType::Search);
+        }
+
         token_type
     }
 
@@ -151,7 +167,7 @@ mod tests {
     fn test_tokenizer_rust() {
         let code = "use nimbus_text_editor::{buffer::Buffer, editor::Editor};fn main() -> Result<(), Error> { let args: Vec<String> = env::args().skip(1).collect(); Ok(()) }";
 
-        let mut tokenizer = RustTokenizer::new(code);
+        let mut tokenizer = RustTokenizer::new(code, vec![]);
         assert_eq!(tokenizer.next().unwrap(), TokenType::Keyword);
         assert_eq!(tokenizer.token(), "use");
         assert_eq!(tokenizer.next().unwrap(), TokenType::Identifier);

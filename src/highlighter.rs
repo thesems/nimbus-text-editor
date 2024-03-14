@@ -1,7 +1,11 @@
+use std::ops::Range;
+
+use termion::color::Bg;
+
 use crate::{terminal::Terminal, tokenizer::{RustTokenizer, TokenType, Tokenizer}};
 
 pub trait Highlighter {
-    fn highlight(&self, content: &str, terminal: &Terminal);
+    fn highlight(&self, content: &str, terminal: &Terminal, search_occurences: Vec<Range<usize>>);
 }
 
 pub struct RustHighlighter {
@@ -11,6 +15,8 @@ pub struct RustHighlighter {
     type_color: &'static dyn termion::color::Color,
     symbol_color: &'static dyn termion::color::Color,
     comment_color: &'static dyn termion::color::Color,
+    search_color: &'static dyn termion::color::Color,
+    search_bg_color: &'static dyn termion::color::Color,
 }
 
 impl RustHighlighter {
@@ -22,6 +28,8 @@ impl RustHighlighter {
             type_color: &termion::color::LightYellow,
             symbol_color: &termion::color::LightWhite,
             comment_color: &termion::color::White,
+            search_color: &termion::color::Black,
+            search_bg_color: &termion::color::LightYellow,
         }
     }
 }
@@ -33,10 +41,11 @@ impl Default for RustHighlighter {
 }
 
 impl Highlighter for RustHighlighter {
-    fn highlight(&self, content: &str, terminal: &Terminal) {
-        let mut tokenizer = RustTokenizer::new(content);
+    fn highlight(&self, content: &str, terminal: &Terminal, search_occurences: Vec<Range<usize>>) {
+        let mut tokenizer = RustTokenizer::new(content, search_occurences);
 
         while let Some(token_type) = tokenizer.next() {
+            let mut bg_color: &'static dyn termion::color::Color = &termion::color::Reset;
             let color = match token_type {
                 TokenType::Keyword => self.keyword_color,
                 TokenType::Constant => self.constant_color,
@@ -49,9 +58,13 @@ impl Highlighter for RustHighlighter {
                 }
                 TokenType::Symbol => self.symbol_color,
                 TokenType::Comment => self.comment_color,
+                TokenType::Search => {
+                    bg_color = self.search_bg_color;
+                    self.search_color
+                }
             };
-          
-            terminal.write_with_color(tokenizer.token(), color);
+
+            terminal.write_with_color_bg(tokenizer.token(), color, bg_color);
         }
     }
 }

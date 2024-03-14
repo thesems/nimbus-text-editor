@@ -200,7 +200,7 @@ impl Editor {
                             ),
                             1,
                         );
-                    } else if self.cursor_position.y > 0 {
+                    } else if self.cursor_position.y > 0 { 
                         let line_len = self
                             .buffer
                             .get_line_length(self.offset_y + self.cursor_position.y - 1);
@@ -515,7 +515,7 @@ impl Editor {
             self.terminal.goto(&pos);
             self.terminal.write_with_color(help, &color::White);
         } else if let Some(highlighter) = self.highlighters.get(&FileExtension::Rust) {
-            highlighter.highlight(buffer, &self.terminal);
+            highlighter.highlight(buffer, &self.terminal, self.search_occurences.clone());
         } else if let Some(range) = self.search_occurences.first() {
             let parts = [
                 &buffer[..range.start],
