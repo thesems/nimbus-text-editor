@@ -23,6 +23,12 @@ enum EditorMode {
     Command,
 }
 
+#[derive(PartialEq)]
+enum SearchMode {
+    None,
+    Incremental,
+}
+
 pub struct Editor {
     terminal: Terminal,
     offset_y: usize,
@@ -39,7 +45,11 @@ pub struct Editor {
     highlighters: HashMap<FileExtension, Box<dyn Highlighter>>,
     extensions: HashMap<String, String>,
     file_extension: String,
+    search_mode: SearchMode,
     search_occurences: Vec<Range<usize>>,
+    search_occurence_idx: usize,
+    search_offset_y: usize,
+    search_cursor_position: Position,
 }
 
 impl Editor {
@@ -76,7 +86,11 @@ impl Editor {
             highlighters,
             extensions,
             file_extension,
+            search_mode: SearchMode::None,
             search_occurences: vec![],
+            search_occurence_idx: 0,
+            search_cursor_position: Position::default(),
+            search_offset_y: 0,
         })
     }
 
@@ -95,7 +109,6 @@ impl Editor {
     pub fn run(&mut self) {
         let stdin = stdin();
         while self.running {
-            self.terminal.hide_cursor();
             self.terminal.clear();
 
             self.draw_buffer();
@@ -105,7 +118,6 @@ impl Editor {
 
             // Position cursor
             self.terminal.goto(&self.adjusted_cursor_position());
-            self.terminal.show_cursor();
             self.terminal.flush();
 
             self.handle_user_input(&stdin);
@@ -151,9 +163,12 @@ impl Editor {
                         EditorMode::Command => {
                             self.command.push(c);
 
-                            if self.command.starts_with('/') {
+                            if self.command.starts_with('/') && self.command.len() > 1 {
                                 self.search_occurences =
-                                    self.buffer.find(&self.command.as_str()[1..], 0);
+                                    self.buffer.find(&self.command.as_str()[1..], 0, true);
+                                self.search_mode = SearchMode::Incremental;
+                            } else if c == '/' && self.command.is_empty() {
+                                self.search_offset_y = self.offset_y;
                             }
                         }
                         _ => self.handle_key_normal_mode(c),
@@ -165,6 +180,8 @@ impl Editor {
             }
             Key::Esc => {
                 if self.mode == EditorMode::Insert || self.mode == EditorMode::Command {
+                    self.search_mode = SearchMode::None;
+                    self.search_offset_y = 0;
                     self.change_mode(EditorMode::Normal);
                 }
             }
@@ -180,10 +197,12 @@ impl Editor {
                 if self.mode == EditorMode::Command && !self.command.is_empty() {
                     self.command.pop();
 
-                    if !self.command.is_empty() {
-                        self.search_occurences = self.buffer.find(&self.command.as_str()[1..], 0);
-                    } else {
+                    if self.command.is_empty() {
                         self.change_mode(EditorMode::Normal);
+                        self.search_occurences.clear();
+                    } else if self.command.starts_with('/') && self.command.len() > 1 {
+                        self.search_occurences =
+                            self.buffer.find(&self.command.as_str()[1..], 0, false);
                     }
                     return;
                 }
@@ -200,7 +219,7 @@ impl Editor {
                             ),
                             1,
                         );
-                    } else if self.cursor_position.y > 0 { 
+                    } else if self.cursor_position.y > 0 {
                         let line_len = self
                             .buffer
                             .get_line_length(self.offset_y + self.cursor_position.y - 1);
@@ -276,6 +295,17 @@ impl Editor {
     }
 
     fn run_command(&mut self) -> std::io::Result<()> {
+        if self.command.starts_with('/') {
+            if !self.search_occurences.is_empty() {
+                self.cursor_position = self.search_cursor_position;
+            }
+            self.search_mode = SearchMode::None;
+            self.offset_y = self.search_offset_y;
+            self.search_offset_y = 0;
+            self.change_mode(EditorMode::Normal);
+            return Ok(());
+        }
+
         let tokens: Vec<&str> = self.command.split(':').collect();
         if tokens.len() <= 1 {
             return Ok(());
@@ -341,6 +371,8 @@ impl Editor {
                 self.change_mode(EditorMode::Command);
                 self.command.push('/');
             }
+            'n' => self.search_next(),
+            'N' => self.search_previous(),
             _ => {}
         }
     }
@@ -360,7 +392,6 @@ impl Editor {
             EditorMode::Normal => {
                 if self.mode == EditorMode::Command {
                     self.clear_command();
-                    self.search_occurences.clear();
                 } else if self.mode == EditorMode::Insert {
                     self.clear_command();
                 }
@@ -385,7 +416,7 @@ impl Editor {
 
     fn move_down(&mut self) {
         let is_valid_line = self.is_valid_line(self.offset_y + self.cursor_position.y + 1);
-        if is_valid_line && self.cursor_position.y == self.terminal.size().1 as usize - 3 {
+        if is_valid_line && self.cursor_position.y == self.draw_terminal_size().1 {
             self.offset_y += 1;
         } else if is_valid_line {
             self.cursor_position.y += 1;
@@ -481,13 +512,19 @@ impl Editor {
     }
 
     fn draw_buffer(&mut self) {
+        self.terminal.hide_cursor();
         self.terminal.goto(&Position::default());
 
+        let offset_y = match self.search_mode {
+            SearchMode::None => self.offset_y,
+            SearchMode::Incremental => self.search_offset_y,
+        };
+
         let buffer = &self.buffer.get(
-            &Position::new(0, self.offset_y),
+            &Position::new(0, offset_y),
             Some(&Position::new(
                 0,
-                self.offset_y + self.terminal.size().1 as usize - 3,
+                offset_y + self.draw_terminal_size().1 + 1,
             )),
         );
 
@@ -515,21 +552,47 @@ impl Editor {
             self.terminal.goto(&pos);
             self.terminal.write_with_color(help, &color::White);
         } else if let Some(highlighter) = self.highlighters.get(&FileExtension::Rust) {
-            highlighter.highlight(buffer, &self.terminal, self.search_occurences.clone());
-        } else if let Some(range) = self.search_occurences.first() {
-            let parts = [
-                &buffer[..range.start],
-                &buffer[range.start..range.end],
-                &buffer[range.end..],
-            ];
-
-            self.terminal.write(parts[0]);
-            self.terminal
-                .write_with_color_bg(parts[1], &color::Black, &color::LightYellow);
-            self.terminal.write(parts[2]);
+            highlighter.highlight(buffer, &self.terminal);
         } else {
             self.terminal.write(buffer);
         }
+
+        if self.search_mode == SearchMode::Incremental && !self.search_occurences.is_empty() {
+            let occurences = vec![self.search_occurences[self.search_occurence_idx].clone()];
+            let offset = self
+                .buffer
+                .get_offset_from_position(&Position::new(0, offset_y))
+                .unwrap_or(0);
+
+            for range in occurences.iter() {
+                let mut pos = self.buffer.get_position_from_offset(range.start);
+                
+                if pos.y < offset_y || pos.y > offset_y + self.draw_terminal_size().1 {
+                    self.search_offset_y = pos.y.saturating_sub(self.draw_terminal_size().1);
+                    return;
+                }
+
+                let start = range.start - offset;
+                let end = range.end - offset;
+
+                pos.y = pos.y.saturating_sub(offset_y);
+                self.search_cursor_position = pos;
+                self.terminal.goto(&pos);
+
+                if self.mode == EditorMode::Command {
+                    self.terminal.write_with_color_bg(
+                        &buffer[start..end],
+                        &color::Black,
+                        &color::LightYellow,
+                    );
+                } else {
+                    self.terminal
+                        .write_with_color(&buffer[start..end], &color::Reset);
+                }    
+            }
+        }
+
+        self.terminal.show_cursor();
     }
 
     fn draw_command(&mut self) {
@@ -572,11 +635,14 @@ impl Editor {
         // let debug = self
         //     .buffer
         //     .get_debug_status(&self.adjusted_cursor_position());
-        let debug = format!("Search: {:?}", self.search_occurences);
+        let debug = format!(
+            "offset_y={} | Search: offset_y={}, pos=({},{}).", self.offset_y,
+            self.search_offset_y, self.search_cursor_position.x, self.search_cursor_position.y
+        );
 
         self.terminal.goto(&Position {
             x: 0,
-            y: self.terminal.size().1 as usize - 4,
+            y: self.terminal.size().1 as usize,
         });
         self.terminal.write(&debug);
     }
@@ -596,6 +662,40 @@ impl Editor {
             return name;
         }
         self.get_extension_name("")
+    }
+
+    fn search_next(&mut self) {
+        if self.search_occurence_idx < self.search_occurences.len() - 1 {
+            self.search_occurence_idx += 1;
+        } else {
+            self.search_occurence_idx = 0;
+        }
+
+        let range = &self.search_occurences[self.search_occurence_idx];
+        let pos = self.buffer.get_position_from_offset(range.start);
+        if pos.y < self.offset_y || pos.y > self.offset_y + self.draw_terminal_size().1 {
+            self.offset_y = pos.y.saturating_sub(self.draw_terminal_size().1);
+        }
+        self.cursor_position = Position::new(pos.x, pos.y.saturating_sub(self.offset_y));
+    }
+
+    fn search_previous(&mut self) {
+        if self.search_occurence_idx > 0 {
+            self.search_occurence_idx -= 1;
+        } else {
+            self.search_occurence_idx = self.search_occurences.len() - 1;
+        }
+        let range = &self.search_occurences[self.search_occurence_idx];
+        let pos = self.buffer.get_position_from_offset(range.start);
+        if pos.y < self.offset_y || pos.y > self.offset_y + self.draw_terminal_size().1 {
+            self.offset_y = pos.y;
+        }
+        self.cursor_position = Position::new(pos.x, pos.y.saturating_sub(self.offset_y));
+    }
+
+    fn draw_terminal_size(&self) -> (usize, usize) {
+        let (w, h) = self.terminal.size();
+        (w.into(), (h - 4).into())
     }
 }
 

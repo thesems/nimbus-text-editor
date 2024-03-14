@@ -265,7 +265,7 @@ impl PieceTable {
         data
     }
 
-    pub fn find(&self, text: &str, offset: usize) -> Vec<Range<usize>> {
+    pub fn find(&self, text: &str, offset: usize, all: bool) -> Vec<Range<usize>> {
         let mut found = vec![];
 
         let mut counted_start = 0;
@@ -286,11 +286,44 @@ impl PieceTable {
                 Source::Add => &self.add[range],
             };
 
-            if let Some(idx) = data.find(text) {
-                found.push(idx..idx+text.len());
+            let mut data_slice = data;
+            let mut offset = 0;
+            while let Some(idx) = data_slice.find(text) {
+                found.push(offset+idx..offset+idx + text.len());
+                data_slice = &data_slice[idx+text.len()..];
+                offset += idx+text.len();
+
+                if !all {
+                    return found;
+                }
             }
         }
+
         found
+    }
+
+    pub fn get_position_from_offset(&self, offset: usize) -> Position {
+        let mut position = Position::new(0, 0);
+
+        'outer: for piece in self.pieces.iter() {
+            let line_starts: &Vec<usize> = match piece.source {
+                Source::Data => &self.line_starts_data,
+                Source::Add => &self.line_starts_add,
+            };
+
+            let mut last_nl = -1isize;
+            for nl in line_starts.iter().skip(1) {
+                if *nl > offset {
+                    position.x = offset - (last_nl as usize + 1);
+                    break 'outer;
+                }
+
+                last_nl = *nl as isize;
+                position.y += 1;
+            }
+        }
+
+        position
     }
 }
 
@@ -299,51 +332,60 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_buffer_init() {
-        let buffer = PieceTable::from_string(String::from("This is already in the file."));
-        assert_eq!(buffer.get(0, None), "This is already in the file.")
+    fn test_piece_table_init() {
+        let piece_table = PieceTable::from_string(String::from("This is already in the file."));
+        assert_eq!(piece_table.get(0, None), "This is already in the file.")
     }
 
     #[test]
-    fn test_buffer_get() {
-        let buffer =
+    fn test_piece_table_get() {
+        let piece_table =
             PieceTable::from_string(String::from("File is read.\r\nThe hero lied.\r\nThe end."));
-        assert_eq!(buffer.get(15, Some(29)), "The hero lied.")
+        assert_eq!(piece_table.get(15, Some(29)), "The hero lied.")
     }
 
     #[test]
     fn test_get_offset_from_position_unmodified_buffer() {
         let file = String::from("File is read.\r\nThe hero lied.\r\nThe end.");
-        let buffer = PieceTable::from_string(file);
+        let piece_table = PieceTable::from_string(file);
 
-        assert_eq!(buffer.data, "File is read.\r\nThe hero lied.\r\nThe end.");
         assert_eq!(
-            buffer.get(0, None),
+            piece_table.data,
+            "File is read.\r\nThe hero lied.\r\nThe end."
+        );
+        assert_eq!(
+            piece_table.get(0, None),
             "File is read.\r\nThe hero lied.\r\nThe end."
         );
 
         assert_eq!(
-            buffer.get_offset_from_position(&Position::new(3, 0)),
+            piece_table.get_offset_from_position(&Position::new(3, 0)),
             Some(3)
         );
         assert_eq!(
-            buffer.get_offset_from_position(&Position::new(0, 1)),
+            piece_table.get_offset_from_position(&Position::new(0, 1)),
             Some(15)
         );
         assert_eq!(
-            buffer.get_offset_from_position(&Position::new(3, 1)),
+            piece_table.get_offset_from_position(&Position::new(3, 1)),
             Some(18)
         );
         assert_eq!(
-            buffer.get_offset_from_position(&Position::new(0, 2)),
+            piece_table.get_offset_from_position(&Position::new(0, 2)),
             Some(31)
         );
         assert_eq!(
-            buffer.get_offset_from_position(&Position::new(7, 2)),
+            piece_table.get_offset_from_position(&Position::new(7, 2)),
             Some(38)
         );
-        assert_eq!(buffer.get_offset_from_position(&Position::new(0, 3)), None);
-        assert_eq!(buffer.get_offset_from_position(&Position::new(7, 3)), None);
+        assert_eq!(
+            piece_table.get_offset_from_position(&Position::new(0, 3)),
+            None
+        );
+        assert_eq!(
+            piece_table.get_offset_from_position(&Position::new(7, 3)),
+            None
+        );
     }
 
     #[test]

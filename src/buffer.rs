@@ -91,8 +91,8 @@ impl Buffer {
         self.piece_table.get(0, None)
     }
 
-    pub fn find(&self, text: &str, offset: usize) -> Vec<std::ops::Range<usize>> {
-        self.piece_table.find(text, offset)
+    pub fn find(&self, text: &str, offset: usize, all: bool) -> Vec<std::ops::Range<usize>> {
+        self.piece_table.find(text, offset, all)
     }
 
     pub fn insert_new_line(&mut self, position: &Position) {
@@ -152,6 +152,14 @@ impl Buffer {
         self.piece_table.get_total_lines()
     }
 
+    pub fn get_offset_from_position(&self, position: &Position) -> Option<usize> {
+        self.piece_table.get_offset_from_position(position)
+    }
+
+    pub fn get_position_from_offset(&self, offset: usize) -> Position {
+        self.piece_table.get_position_from_offset(offset)
+    }
+
     pub fn get_debug_status(&self, position: &Position) -> String {
         let debug_offset = self
             .piece_table
@@ -198,11 +206,12 @@ mod tests {
 
     #[test]
     fn test_buffer_search() {
-        let buffer =
-            Buffer::from_string(String::from("File is read.\r\nThe hero lied.\r\nThe end."));
-        
-        let occurences = buffer.find("hero", 0);
-        assert_eq!(occurences[0], 19..23)
+        let buffer = Buffer::from_string(String::from(
+            "File is read.\r\nThe hero lied.\r\nThe end.\r\nThe hero rises once more.",
+        ));
+        let occurences = buffer.find("hero", 0, false);
+        assert_eq!(occurences[0], 19..23);
+        assert_eq!(occurences[1], 45..49);
     }
 
     #[test]
