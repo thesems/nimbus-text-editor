@@ -27,7 +27,7 @@ Supported file types for highlighting:
 | :             | Enter command input.      |
 | Arrows        | Vertical/Horizontal Navigation    |
 | h,j,k,l       | Vertical/Horizontal Navigation    |
-| w, b          | Move forward/backward by one word.    |
+| w,b          | Move forward/backward by one word.    |
 | Backspace     | Delete a character before cursor. |
 | Delete        | Delete a character after cursor.  |
 | Home          | Go to start of line.      |
@@ -46,6 +46,11 @@ Supported file types for highlighting:
 | debug | Toggle debug bar |
 | help  | Show help text. |
 
+**Vim motions**
+
+Currently supported motion structure:
+- {motion}
+- {count}{motion}
 
 ## Implementation
 

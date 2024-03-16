@@ -48,6 +48,7 @@ pub struct Editor {
     search_occurence_idx: usize,
     search_offset_y: usize,
     search_cursor_position: Position,
+    motion_acc: String,
 }
 
 impl Editor {
@@ -101,6 +102,7 @@ impl Editor {
             search_occurence_idx: 0,
             search_cursor_position: Position::default(),
             search_offset_y: 0,
+            motion_acc: String::new(),
         })
     }
 
@@ -142,7 +144,7 @@ impl Editor {
             Key::Char(c) => {
                 if c == '\n' {
                     match self.mode {
-                        EditorMode::Normal => self.move_down(),
+                        EditorMode::Normal => self.move_down(1),
                         EditorMode::Insert => {
                             self.reset_cursor();
                             self.buffer.insert_new_line(&Position::new(
@@ -290,10 +292,10 @@ impl Editor {
                     }
                 }
             }
-            Key::Left => self.move_left(),
-            Key::Right => self.move_right(),
-            Key::Up => self.move_up(),
-            Key::Down => self.move_down(),
+            Key::Left => self.move_left(1),
+            Key::Right => self.move_right(1),
+            Key::Up => self.move_up(1),
+            Key::Down => self.move_down(1),
             Key::Home => self.move_to_sol(),
             Key::End => self.move_to_eol(),
             Key::PageUp => self.move_page_up(),
@@ -365,16 +367,29 @@ impl Editor {
     }
 
     fn handle_key_normal_mode(&mut self, key: char) {
+        if key.is_numeric() {
+            self.motion_acc.push(key);
+            return;
+        }
+
+        let times = match self.motion_acc.parse::<usize>() {
+            Ok(t) => {
+                self.motion_acc.clear();
+                t
+            }
+            _ => 1,
+        };
+
         match key {
             'i' => self.change_mode(EditorMode::Insert),
-            'k' => self.move_up(),
-            'j' => self.move_down(),
-            'h' => self.move_left(),
-            'l' => self.move_right(),
+            'k' => self.move_up(times),
+            'j' => self.move_down(times),
+            'h' => self.move_left(times),
+            'l' => self.move_right(times),
             '0' => self.move_to_sol(),
             '$' => self.move_to_eol(),
-            'w' => self.move_right_by_word(),
-            'b' => self.move_left_by_word(),
+            'w' => self.move_right_by_word(times),
+            'b' => self.move_left_by_word(times),
             'A' => {
                 self.move_to_eol();
                 self.change_mode(EditorMode::Insert);
@@ -415,44 +430,56 @@ impl Editor {
         self.mode = mode;
     }
 
-    fn move_up(&mut self) {
-        if self.cursor_position.y == 0 && self.offset_y > 0 {
-            self.offset_y -= 1;
-        } else if self.cursor_position.y > 0 {
-            self.cursor_position.y -= 1;
-        }
-        self.current_line_length = self
-            .buffer
-            .get_line_length(self.offset_y + self.cursor_position.y);
-    }
-
-    fn move_down(&mut self) {
-        let is_valid_line = self.is_valid_line(self.offset_y + self.cursor_position.y + 1);
-        if is_valid_line && self.cursor_position.y == self.draw_terminal_size().1 {
-            self.offset_y += 1;
-        } else if is_valid_line {
-            self.cursor_position.y += 1;
-        }
-        self.current_line_length = self
-            .buffer
-            .get_line_length(self.offset_y + self.cursor_position.y);
-    }
-
-    fn move_right(&mut self) {
-        self.reset_cursor();
-        let new_position = Position {
-            x: self.cursor_position.x + 1,
-            y: self.offset_y + self.cursor_position.y,
-        };
-        if self.is_valid_column(&new_position) {
-            self.cursor_position.x += 1;
+    fn move_up(&mut self, mut repeat_times: usize) {
+        while repeat_times > 0 {
+            if self.cursor_position.y == 0 && self.offset_y > 0 {
+                self.offset_y -= 1;
+            } else if self.cursor_position.y > 0 {
+                self.cursor_position.y -= 1;
+            }
+            self.current_line_length = self
+                .buffer
+                .get_line_length(self.offset_y + self.cursor_position.y);
+            repeat_times -= 1;
         }
     }
 
-    fn move_left(&mut self) {
-        self.reset_cursor();
-        if self.cursor_position.x > 0 {
-            self.cursor_position.x -= 1;
+    fn move_down(&mut self, mut repeat_times: usize) {
+        while repeat_times > 0 {
+            let is_valid_line = self.is_valid_line(self.offset_y + self.cursor_position.y + 1);
+            if is_valid_line && self.cursor_position.y == self.draw_terminal_size().1 {
+                self.offset_y += 1;
+            } else if is_valid_line {
+                self.cursor_position.y += 1;
+            }
+            self.current_line_length = self
+                .buffer
+                .get_line_length(self.offset_y + self.cursor_position.y);
+            repeat_times -= 1;
+        }
+    }
+
+    fn move_right(&mut self, mut repeat_times: usize) {
+        while repeat_times > 0 {
+            self.reset_cursor();
+            let new_position = Position {
+                x: self.cursor_position.x + 1,
+                y: self.offset_y + self.cursor_position.y,
+            };
+            if self.is_valid_column(&new_position) {
+                self.cursor_position.x += 1;
+            }
+            repeat_times -= 1;
+        }
+    }
+
+    fn move_left(&mut self, mut repeat_times: usize) {
+        while repeat_times > 0 {
+            self.reset_cursor();
+            if self.cursor_position.x > 0 {
+                self.cursor_position.x -= 1;
+            }
+            repeat_times -= 1;
         }
     }
 
@@ -485,87 +512,96 @@ impl Editor {
             .get_line_length(self.offset_y + self.cursor_position.y);
     }
 
-    fn move_right_by_word(&mut self) {
-        let mut offset = self
-            .buffer
-            .get_offset_from_position(&Position::new(
-                self.cursor_position.x,
-                self.offset_y + self.cursor_position.y,
-            ))
-            .unwrap_or(0);
+    fn move_right_by_word(&mut self, mut repeat_times: usize) {
+        while repeat_times > 0 {
+            let mut offset = self
+                .buffer
+                .get_offset_from_position(&Position::new(
+                    self.cursor_position.x,
+                    self.offset_y + self.cursor_position.y,
+                ))
+                .unwrap_or(0);
 
-        let buffer = self.buffer.get(&Position::new(0, 0), None);
-        let eval_type = |ch: char| -> u16 {
-            if ch.is_alphanumeric() {
-                0
-            } else if ch == ' ' {
-                1
-            } else if ch.is_ascii_punctuation() {
-                2
-            } else {
-                3
+            let buffer = self.buffer.get(&Position::new(0, 0), None);
+            let eval_type = |ch: char| -> u16 {
+                if ch.is_alphanumeric() {
+                    0
+                } else if ch == ' ' {
+                    1
+                } else if ch.is_ascii_punctuation() {
+                    2
+                } else {
+                    3
+                }
+            };
+
+            let mut ch = buffer.chars().nth(offset).unwrap();
+            let mut consecutive_type = eval_type(ch);
+            let mut init_type = consecutive_type;
+
+            while init_type == consecutive_type {
+                self.move_right(1);
+                offset += 1;
+                ch = buffer.chars().nth(offset).unwrap();
+                consecutive_type = eval_type(ch);
+                if consecutive_type == 1 && init_type != consecutive_type {
+                    init_type = consecutive_type;
+                }
             }
-        };
-
-        let mut ch = buffer.chars().nth(offset).unwrap();
-        let mut consecutive_type = eval_type(ch);
-        let mut init_type = consecutive_type;
-
-        while init_type == consecutive_type {
-            self.move_right();
-            offset += 1;
-            ch = buffer.chars().nth(offset).unwrap();
-            consecutive_type = eval_type(ch);
-            if consecutive_type == 1 && init_type != consecutive_type {
-                init_type = consecutive_type;
-            }
+            repeat_times -= 1;
         }
     }
 
-    fn move_left_by_word(&mut self) {
-        let mut offset = self
-            .buffer
-            .get_offset_from_position(&Position::new(
-                self.cursor_position.x,
-                self.offset_y + self.cursor_position.y,
-            ))
-            .unwrap_or(0);
+    fn move_left_by_word(&mut self, mut repeat_times: usize) {
+        while repeat_times > 0 {
+            let mut offset = self
+                .buffer
+                .get_offset_from_position(&Position::new(
+                    self.cursor_position.x,
+                    self.offset_y + self.cursor_position.y,
+                ))
+                .unwrap_or(0);
 
-        let buffer = self.buffer.get(&Position::new(0, 0), None);
-        let eval_type = |ch: char| -> u16 {
-            if ch.is_alphanumeric() {
-                0
-            } else if ch == ' ' {
-                1
-            } else if ch.is_ascii_punctuation() {
-                2
-            } else {
-                3
+            let buffer = self.buffer.get(&Position::new(0, 0), None);
+            let eval_type = |ch: char| -> u16 {
+                if ch.is_alphanumeric() {
+                    0
+                } else if ch == ' ' {
+                    1
+                } else if ch.is_ascii_punctuation() {
+                    2
+                } else {
+                    3
+                }
+            };
+
+            let mut ch = buffer.chars().nth(offset).unwrap();
+            let mut consecutive_type = eval_type(ch);
+            let mut init_type = consecutive_type;
+            let mut exit = false;
+
+            while init_type == consecutive_type {
+                self.move_left(1);
+                offset -= 1;
+                ch = buffer.chars().nth(offset).unwrap();
+                consecutive_type = eval_type(ch);
+
+                if init_type != consecutive_type && exit {
+                    self.move_right(1);
+                    break;
+                }
+
+                if consecutive_type == 1 && init_type != consecutive_type {
+                    init_type = consecutive_type;
+                } else if (consecutive_type == 0 || consecutive_type == 2)
+                    && init_type != consecutive_type
+                    && !exit
+                {
+                    init_type = consecutive_type;
+                    exit = true;
+                }
             }
-        };
-
-        let mut ch = buffer.chars().nth(offset).unwrap();
-        let mut consecutive_type = eval_type(ch);
-        let mut init_type = consecutive_type;
-        let mut exit = false;
-
-        while init_type == consecutive_type {
-            self.move_left();
-            offset -= 1;
-            ch = buffer.chars().nth(offset).unwrap();
-            consecutive_type = eval_type(ch);
-
-            if init_type != consecutive_type && exit {
-                self.move_right();
-                break;
-            }
-
-            if consecutive_type == 1 && init_type != consecutive_type {
-                init_type = consecutive_type;
-            } else if (consecutive_type == 0 || consecutive_type == 2) && init_type != consecutive_type && !exit {
-                init_type = consecutive_type;
-                exit = true;
-            }
+            repeat_times -= 1;
         }
     }
 
@@ -807,11 +843,11 @@ mod tests {
         assert!(editor.is_valid_column(&Position::new(0, 0)));
         assert!(editor.is_valid_column(&Position::new(13, 0)));
 
-        editor.move_down();
+        editor.move_down(1);
         assert!(editor.is_valid_column(&Position::new(0, 1)));
         assert!(editor.is_valid_column(&Position::new(14, 1)));
 
-        editor.move_down();
+        editor.move_down(1);
         assert!(editor.is_valid_column(&Position::new(0, 2)));
         assert!(editor.is_valid_column(&Position::new(8, 2)));
 
@@ -855,7 +891,7 @@ mod tests {
         assert_eq!(editor.buffer.get_line_length(1), 22);
         assert_eq!(editor.buffer.get_total_lines(), 3);
 
-        editor.move_down();
+        editor.move_down(1);
         assert!(editor.is_valid_column(&Position { x: 22, y: 1 }));
         assert!(!editor.is_valid_column(&Position { x: 23, y: 1 }));
         assert!(editor.is_valid_line(1));
