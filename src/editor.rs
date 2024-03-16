@@ -60,7 +60,8 @@ impl Editor {
 
         let file_extension = extensions
             .get(buffer.file_extension().unwrap_or(""))
-            .unwrap_or(&FileExtension::Unknown).clone();
+            .unwrap_or(&FileExtension::Unknown)
+            .clone();
 
         let mut highlighters = HashMap::new();
         match file_extension.as_str() {
@@ -372,6 +373,8 @@ impl Editor {
             'l' => self.move_right(),
             '0' => self.move_to_sol(),
             '$' => self.move_to_eol(),
+            'w' => self.move_right_by_word(),
+            'b' => self.move_left_by_word(),
             'A' => {
                 self.move_to_eol();
                 self.change_mode(EditorMode::Insert);
@@ -480,6 +483,90 @@ impl Editor {
         self.current_line_length = self
             .buffer
             .get_line_length(self.offset_y + self.cursor_position.y);
+    }
+
+    fn move_right_by_word(&mut self) {
+        let mut offset = self
+            .buffer
+            .get_offset_from_position(&Position::new(
+                self.cursor_position.x,
+                self.offset_y + self.cursor_position.y,
+            ))
+            .unwrap_or(0);
+
+        let buffer = self.buffer.get(&Position::new(0, 0), None);
+        let eval_type = |ch: char| -> u16 {
+            if ch.is_alphanumeric() {
+                0
+            } else if ch == ' ' {
+                1
+            } else if ch.is_ascii_punctuation() {
+                2
+            } else {
+                3
+            }
+        };
+
+        let mut ch = buffer.chars().nth(offset).unwrap();
+        let mut consecutive_type = eval_type(ch);
+        let mut init_type = consecutive_type;
+
+        while init_type == consecutive_type {
+            self.move_right();
+            offset += 1;
+            ch = buffer.chars().nth(offset).unwrap();
+            consecutive_type = eval_type(ch);
+            if consecutive_type == 1 && init_type != consecutive_type {
+                init_type = consecutive_type;
+            }
+        }
+    }
+
+    fn move_left_by_word(&mut self) {
+        let mut offset = self
+            .buffer
+            .get_offset_from_position(&Position::new(
+                self.cursor_position.x,
+                self.offset_y + self.cursor_position.y,
+            ))
+            .unwrap_or(0);
+
+        let buffer = self.buffer.get(&Position::new(0, 0), None);
+        let eval_type = |ch: char| -> u16 {
+            if ch.is_alphanumeric() {
+                0
+            } else if ch == ' ' {
+                1
+            } else if ch.is_ascii_punctuation() {
+                2
+            } else {
+                3
+            }
+        };
+
+        let mut ch = buffer.chars().nth(offset).unwrap();
+        let mut consecutive_type = eval_type(ch);
+        let mut init_type = consecutive_type;
+        let mut exit = false;
+
+        while init_type == consecutive_type {
+            self.move_left();
+            offset -= 1;
+            ch = buffer.chars().nth(offset).unwrap();
+            consecutive_type = eval_type(ch);
+
+            if init_type != consecutive_type && exit {
+                self.move_right();
+                break;
+            }
+
+            if consecutive_type == 1 && init_type != consecutive_type {
+                init_type = consecutive_type;
+            } else if (consecutive_type == 0 || consecutive_type == 2) && init_type != consecutive_type && !exit {
+                init_type = consecutive_type;
+                exit = true;
+            }
+        }
     }
 
     /// Moves the cursor to start of line.

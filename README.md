@@ -27,6 +27,7 @@ Supported file types for highlighting:
 | :             | Enter command input.      |
 | Arrows        | Vertical/Horizontal Navigation    |
 | h,j,k,l       | Vertical/Horizontal Navigation    |
+| w, b          | Move forward/backward by one word.    |
 | Backspace     | Delete a character before cursor. |
 | Delete        | Delete a character after cursor.  |
 | Home          | Go to start of line.      |
