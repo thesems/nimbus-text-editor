@@ -448,6 +448,8 @@ impl Editor {
         let height = self.terminal.size().1 - 3;
         if self.offset_y > height as usize {
             self.offset_y -= height as usize;
+        } else if self.offset_y == 0 {
+            self.cursor_position = Position::default();
         } else {
             self.offset_y = 0;
         }
@@ -462,6 +464,8 @@ impl Editor {
         let height = self.terminal.size().1 - 3;
         if (self.offset_y + height as usize) < total_lines {
             self.offset_y += height as usize;
+        } else {
+            self.cursor_position = Position::new(0, total_lines - self.offset_y - 1);
         }
 
         self.current_line_length = self
@@ -566,7 +570,7 @@ impl Editor {
 
             for range in occurences.iter() {
                 let mut pos = self.buffer.get_position_from_offset(range.start);
-                
+
                 if pos.y < offset_y || pos.y > offset_y + self.draw_terminal_size().1 {
                     self.search_offset_y = pos.y.saturating_sub(self.draw_terminal_size().1);
                     return;
@@ -588,7 +592,7 @@ impl Editor {
                 } else {
                     self.terminal
                         .write_with_color(&buffer[start..end], &color::Reset);
-                }    
+                }
             }
         }
 
@@ -636,8 +640,11 @@ impl Editor {
         //     .buffer
         //     .get_debug_status(&self.adjusted_cursor_position());
         let debug = format!(
-            "offset_y={} | Search: offset_y={}, pos=({},{}).", self.offset_y,
-            self.search_offset_y, self.search_cursor_position.x, self.search_cursor_position.y
+            "offset_y={} | Search: offset_y={}, pos=({},{}).",
+            self.offset_y,
+            self.search_offset_y,
+            self.search_cursor_position.x,
+            self.search_cursor_position.y
         );
 
         self.terminal.goto(&Position {
