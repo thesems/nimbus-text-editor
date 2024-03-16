@@ -48,11 +48,17 @@ Supported file types for highlighting:
 
 ## Implementation
 
-**Piece Table**
+**Text Buffer - Piece Table Data Structure**
 
 The text buffer is implemented with a piece table data structure.
 It allows fast insertion and deletion times.
 It also does not require much meta-data per line to be stored.
+
+**Syntax Highlighting**
+
+A tokenizer is used to parse the text and extract syntactical structure
+of the code. Based on the token type, the appropriate color is applied.
+It requires each language to have it's tokenizer implemented.
 
 ## References:
 [Termion - Rust terminal library](https://docs.rs/termion/latest/termion/)
