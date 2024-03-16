@@ -1,8 +1,6 @@
 use crate::{
-    buffer::Buffer,
-    file_extension::FileExtension,
-    highlighter::{Highlighter, RustHighlighter},
-    position::Position,
+    buffer::Buffer, file_extension::FileExtension, highlighter::Highlighter,
+    highlighter_rust::HighlighterRust, highlighter_toml::HighlighterToml, position::Position,
     terminal::Terminal,
 };
 use std::{
@@ -43,8 +41,8 @@ pub struct Editor {
     debug_bar: bool,
     buffer: Buffer,
     highlighters: HashMap<FileExtension, Box<dyn Highlighter>>,
-    extensions: HashMap<String, String>,
-    file_extension: String,
+    extensions: HashMap<String, FileExtension>,
+    file_extension: FileExtension,
     search_mode: SearchMode,
     search_occurences: Vec<Range<usize>>,
     search_occurence_idx: usize,
@@ -55,19 +53,30 @@ pub struct Editor {
 impl Editor {
     pub fn new(buffer: Buffer) -> Result<Editor, Error> {
         let mut extensions = HashMap::new();
-        extensions.insert("rs".to_string(), "rust".to_string());
-        extensions.insert("toml".to_string(), "toml".to_string());
-        extensions.insert("txt".to_string(), "text".to_string());
-        extensions.insert("".to_string(), "unknown".to_string());
+        extensions.insert("rs".to_string(), FileExtension::Rust);
+        extensions.insert("toml".to_string(), FileExtension::Toml);
+        extensions.insert("txt".to_string(), FileExtension::Text);
+        extensions.insert("".to_string(), FileExtension::Unknown);
 
-        let file_extension = buffer.file_extension().unwrap_or("").to_string();
+        let file_extension = extensions
+            .get(buffer.file_extension().unwrap_or(""))
+            .unwrap_or(&FileExtension::Unknown).clone();
 
         let mut highlighters = HashMap::new();
-        if let "rs" = file_extension.as_str() {
-            highlighters.insert(
-                FileExtension::Rust,
-                Box::<RustHighlighter>::default() as Box<dyn Highlighter>,
-            );
+        match file_extension.as_str() {
+            "rs" => {
+                highlighters.insert(
+                    FileExtension::Rust,
+                    Box::<HighlighterRust>::default() as Box<dyn Highlighter>,
+                );
+            }
+            "toml" => {
+                highlighters.insert(
+                    FileExtension::Toml,
+                    Box::<HighlighterToml>::default() as Box<dyn Highlighter>,
+                );
+            }
+            _ => (),
         }
 
         Ok(Editor {
@@ -555,7 +564,7 @@ impl Editor {
             pos.y += 2;
             self.terminal.goto(&pos);
             self.terminal.write_with_color(help, &color::White);
-        } else if let Some(highlighter) = self.highlighters.get(&FileExtension::Rust) {
+        } else if let Some(highlighter) = self.highlighters.get(&self.file_extension) {
             highlighter.highlight(buffer, &self.terminal);
         } else {
             self.terminal.write(buffer);
@@ -615,7 +624,7 @@ impl Editor {
         let left_side = self.buffer.file_path().unwrap_or("[No Name]").to_string();
         let right_side = format!(
             "{} | {}:{}",
-            self.get_extension_name(&self.file_extension),
+            &self.file_extension.as_str(),
             self.cursor_position.y,
             self.cursor_position.x,
         );
@@ -662,13 +671,6 @@ impl Editor {
     fn toggle_debug_bar(&mut self) {
         self.debug_bar = !self.debug_bar;
         self.clear_command();
-    }
-
-    fn get_extension_name(&self, extension: &str) -> &str {
-        if let Some(name) = self.extensions.get(extension) {
-            return name;
-        }
-        self.get_extension_name("")
     }
 
     fn search_next(&mut self) {
