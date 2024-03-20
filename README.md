@@ -67,8 +67,8 @@ of the code. Based on the token type, the appropriate color is applied.
 It requires each language to have it's tokenizer implemented.
 
 ## References:
-[Termion - Rust terminal library](https://docs.rs/termion/latest/termion/)
-[Vim motions](https://vimdoc.sourceforge.net/htmldoc/motion.html)
+[Termion - Rust terminal library](https://docs.rs/termion/latest/termion/)  
+[Vim motions](https://vimdoc.sourceforge.net/htmldoc/motion.html)  
 [Piece Table wikipedia](https://en.wikipedia.org/wiki/Piece_table)  
 [Simple Explanation of Piece Table](https://darrenburns.net/posts/piece-table/)  
 [Piece table implementation in JavaScript](https://github.com/sparkeditor/piece-table)  
